@@ -1,0 +1,14 @@
+# Fine riga normalizzati nel repository
+* text=auto
+
+# CSV d'esempio: conservati byte per byte (BOM UTF-8 + CRLF, come li esporta l'app)
+*.csv -text
+
+# Binari
+*.ttf binary
+*.wasm binary
+*.png binary
+
+# File generati: niente diff rumorosi
+*.g.dart linguist-generated
+web/drift_worker.js -diff linguist-generated

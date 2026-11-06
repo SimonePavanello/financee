@@ -1,0 +1,132 @@
+﻿Data;Tipo;Categoria;Descrizione;Importo (€)
+01/06/2026;Entrata;Stipendio;Stipendio giugno;2017,00
+01/06/2026;Uscita;Ristoranti e bar;Pizzeria da Gino;-17,50
+01/06/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/06/2026;Uscita;Abbonamenti;Palestra;-39,00
+03/06/2026;Uscita;Casa;Affitto;-650,00
+03/06/2026;Uscita;Spesa;Esselunga;-62,07
+05/06/2026;Uscita;Abbonamenti;Netflix;-13,99
+06/06/2026;Uscita;Ristoranti e bar;Pizzeria da Gino;-46,50
+08/06/2026;Uscita;Bollette;Luce;-88,72
+09/06/2026;Uscita;Spesa;Carrefour;-66,69
+09/06/2026;Uscita;Trasporti;Benzina;-59,00
+10/06/2026;Uscita;Abbonamenti;Spotify;-11,99
+10/06/2026;Uscita;Istruzione;Corso di inglese;-120,00
+12/06/2026;Uscita;Bollette;Gas;-55,87
+12/06/2026;Uscita;Ristoranti e bar;Trattoria;-18,50
+15/06/2026;Uscita;Bollette;Internet fibra;-27,99
+18/06/2026;Uscita;Spesa;Conad;-91,62
+20/06/2026;Uscita;Shopping;Amazon;-94,00
+21/06/2026;Uscita;Ristoranti e bar;Colazione al bar;-31,50
+23/06/2026;Uscita;Ristoranti e bar;Colazione al bar;-46,50
+25/06/2026;Uscita;Spesa;Carrefour;-73,73
+01/07/2026;Entrata;Stipendio;Stipendio luglio;1999,00
+01/07/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/07/2026;Uscita;Abbonamenti;Palestra;-39,00
+02/07/2026;Uscita;Spesa;Lidl;-57,23
+03/07/2026;Uscita;Casa;Affitto;-650,00
+05/07/2026;Uscita;Abbonamenti;Netflix;-13,99
+08/07/2026;Uscita;Bollette;Luce;-89,92
+09/07/2026;Entrata;Rimborsi;Rimborso 730;85,00
+10/07/2026;Uscita;Abbonamenti;Spotify;-11,99
+10/07/2026;Uscita;Spesa;Lidl;-69,32
+10/07/2026;Uscita;Trasporti;Benzina;-72,00
+12/07/2026;Uscita;Bollette;Gas;-46,73
+13/07/2026;Uscita;Ristoranti e bar;Colazione al bar;-25,50
+15/07/2026;Uscita;Bollette;Internet fibra;-27,99
+15/07/2026;Uscita;Salute;Farmacia;-24,00
+16/07/2026;Uscita;Svago;Cinema;-9,50
+18/07/2026;Uscita;Spesa;Lidl;-53,93
+18/07/2026;Uscita;Regali;Regalo compleanno Marta;-45,00
+19/07/2026;Uscita;Shopping;Decathlon;-71,00
+20/07/2026;Entrata;Freelance;Consulenza;414,00
+20/07/2026;Uscita;Ristoranti e bar;Pizzeria da Gino;-37,50
+23/07/2026;Uscita;Ristoranti e bar;Trattoria;-28,50
+24/07/2026;Uscita;Spesa;Conad;-69,56
+01/08/2026;Entrata;Stipendio;Stipendio agosto;1981,00
+01/08/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/08/2026;Uscita;Abbonamenti;Palestra;-39,00
+03/08/2026;Uscita;Casa;Affitto;-650,00
+03/08/2026;Uscita;Spesa;Carrefour;-94,15
+05/08/2026;Uscita;Abbonamenti;Netflix;-13,99
+06/08/2026;Uscita;Ristoranti e bar;Colazione al bar;-33,50
+07/08/2026;Uscita;Trasporti;Benzina;-74,00
+08/08/2026;Uscita;Bollette;Luce;-98,82
+09/08/2026;Uscita;Spesa;Lidl;-45,51
+10/08/2026;Uscita;Abbonamenti;Spotify;-11,99
+12/08/2026;Uscita;Bollette;Gas;-37,22
+14/08/2026;Uscita;Ristoranti e bar;Sushi;-30,50
+15/08/2026;Uscita;Bollette;Internet fibra;-27,99
+18/08/2026;Uscita;Spesa;Esselunga;-82,75
+20/08/2026;Uscita;Shopping;IKEA;-88,00
+21/08/2026;Uscita;Ristoranti e bar;Pizzeria da Gino;-29,50
+21/08/2026;Uscita;Svago;Concerto;-68,00
+24/08/2026;Uscita;Spesa;Coop;-71,54
+26/08/2026;Uscita;Ristoranti e bar;Pizzeria da Gino;-22,50
+01/09/2026;Entrata;Stipendio;Stipendio settembre;2043,00
+01/09/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/09/2026;Uscita;Abbonamenti;Palestra;-39,00
+03/09/2026;Uscita;Casa;Affitto;-650,00
+03/09/2026;Uscita;Ristoranti e bar;Sushi;-29,50
+04/09/2026;Uscita;Spesa;Lidl;-48,15
+05/09/2026;Uscita;Abbonamenti;Netflix;-13,99
+08/09/2026;Uscita;Bollette;Luce;-99,88
+08/09/2026;Uscita;Trasporti;Benzina;-62,00
+10/09/2026;Uscita;Abbonamenti;Spotify;-11,99
+10/09/2026;Uscita;Spesa;Conad;-87,26
+10/09/2026;Uscita;Salute;Farmacia;-15,00
+12/09/2026;Uscita;Bollette;Gas;-38,28
+12/09/2026;Uscita;Viaggi;Weekend a Roma;-320,00
+15/09/2026;Uscita;Bollette;Internet fibra;-27,99
+17/09/2026;Uscita;Ristoranti e bar;Colazione al bar;-24,50
+18/09/2026;Uscita;Spesa;Esselunga;-50,10
+19/09/2026;Uscita;Shopping;Amazon;-94,00
+20/09/2026;Entrata;Freelance;Consulenza;307,00
+21/09/2026;Uscita;Ristoranti e bar;Trattoria;-14,50
+21/09/2026;Uscita;Ristoranti e bar;Sushi;-46,50
+25/09/2026;Uscita;Spesa;Lidl;-45,19
+28/09/2026;Uscita;Ristoranti e bar;Aperitivo;-35,50
+01/10/2026;Entrata;Stipendio;Stipendio ottobre;1979,00
+01/10/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/10/2026;Uscita;Abbonamenti;Palestra;-39,00
+03/10/2026;Uscita;Casa;Affitto;-650,00
+04/10/2026;Uscita;Spesa;Lidl;-42,11
+05/10/2026;Uscita;Abbonamenti;Netflix;-13,99
+06/10/2026;Uscita;Trasporti;Benzina;-77,00
+08/10/2026;Uscita;Bollette;Luce;-64,06
+10/10/2026;Uscita;Abbonamenti;Spotify;-11,99
+10/10/2026;Uscita;Spesa;Coop;-52,73
+11/10/2026;Uscita;Ristoranti e bar;Colazione al bar;-24,50
+12/10/2026;Uscita;Bollette;Gas;-40,68
+12/10/2026;Uscita;Ristoranti e bar;Trattoria;-49,50
+15/10/2026;Entrata;Investimenti;Cedola BTP;64,30
+15/10/2026;Uscita;Bollette;Internet fibra;-27,99
+15/10/2026;Uscita;Ristoranti e bar;Aperitivo;-46,50
+16/10/2026;Uscita;Spesa;Lidl;-93,77
+16/10/2026;Uscita;Svago;Cinema;-9,50
+18/10/2026;Uscita;Ristoranti e bar;Colazione al bar;-8,50
+21/10/2026;Uscita;Shopping;Decathlon;-115,00
+22/10/2026;Uscita;Ristoranti e bar;Sushi;-13,50
+23/10/2026;Uscita;Spesa;Esselunga;-63,45
+26/10/2026;Uscita;Salute;Farmacia;-41,00
+01/11/2026;Entrata;Stipendio;Stipendio novembre;2061,00
+01/11/2026;Uscita;Trasporti;Abbonamento mezzi;-35,00
+02/11/2026;Uscita;Abbonamenti;Palestra;-39,00
+02/11/2026;Uscita;Spesa;Coop;-95,94
+03/11/2026;Uscita;Casa;Affitto;-650,00
+04/11/2026;Uscita;Ristoranti e bar;Trattoria;-9,50
+05/11/2026;Uscita;Abbonamenti;Netflix;-13,99
+08/11/2026;Uscita;Bollette;Luce;-73,83
+08/11/2026;Uscita;Trasporti;Benzina;-72,00
+10/11/2026;Uscita;Abbonamenti;Spotify;-11,99
+11/11/2026;Uscita;Spesa;Carrefour;-90,96
+12/11/2026;Uscita;Bollette;Gas;-72,79
+12/11/2026;Uscita;Ristoranti e bar;Aperitivo;-24,50
+15/11/2026;Uscita;Bollette;Internet fibra;-27,99
+15/11/2026;Uscita;Ristoranti e bar;Colazione al bar;-8,50
+16/11/2026;Uscita;Spesa;Carrefour;-55,78
+20/11/2026;Entrata;Freelance;Consulenza;259,00
+20/11/2026;Uscita;Svago;Cinema;-9,50
+21/11/2026;Uscita;Salute;Farmacia;-33,00
+22/11/2026;Uscita;Shopping;IKEA;-39,00
+23/11/2026;Uscita;Spesa;Coop;-71,68

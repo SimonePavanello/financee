@@ -1,0 +1,182 @@
+﻿REPORT FINANZE PERSONALI
+Periodo;01/06/2026 – 30/11/2026
+Dal;01/06/2026;Al;30/11/2026
+Generato il;30/11/2026 00:00
+
+RIEPILOGO
+Voce;Valore;Spiegazione
+Entrate totali (€);13209,30;11 entrate
+Uscite totali (€);9424,84;120 uscite
+Saldo del periodo (€);3784,46;Hai messo da parte 3.784,46 €
+Tasso di risparmio;28,6%;Quota delle entrate non spesa
+Spesa media giornaliera (€);51,50;Uscite divise per 183 giorni
+Spesa più alta (€);650,00;Affitto (Casa) del 03/11/2026
+Categoria di spesa principale;Casa;41,4% delle uscite (3.900,00 €)
+
+USCITE PER CATEGORIA
+Categoria;Totale (€);% sulle uscite;N. movimenti;Importo medio (€)
+Casa;3900,00;41,4%;6;650,00
+Spesa;1635,22;17,4%;24;68,13
+Bollette;974,74;10,3%;18;54,15
+Ristoranti e bar;703,50;7,5%;25;28,14
+Trasporti;626,00;6,6%;12;52,17
+Shopping;501,00;5,3%;6;83,50
+Abbonamenti;389,88;4,1%;18;21,66
+Viaggi;320,00;3,4%;1;320,00
+Istruzione;120,00;1,3%;1;120,00
+Salute;113,00;1,2%;4;28,25
+Svago;96,50;1,0%;4;24,13
+Regali;45,00;0,5%;1;45,00
+TOTALE;9424,84;100%;120;
+
+ENTRATE PER CATEGORIA
+Categoria;Totale (€);% sulle entrate;N. movimenti;Importo medio (€)
+Stipendio;12080,00;91,5%;6;2013,33
+Freelance;980,00;7,4%;3;326,67
+Rimborsi;85,00;0,6%;1;85,00
+Investimenti;64,30;0,5%;1;64,30
+TOTALE;13209,30;100%;11;
+
+ANDAMENTO MENSILE
+Mese;Entrate (€);Uscite (€);Saldo del mese (€);Saldo cumulato (€)
+Giugno 2026;2017,00;1650,17;366,83;366,83
+Luglio 2026;2498,00;1477,66;1020,34;1387,17
+Agosto 2026;1981,00;1553,96;427,04;1814,21
+Settembre 2026;2350,00;1788,33;561,67;2375,88
+Ottobre 2026;2043,30;1519,77;523,53;2899,41
+Novembre 2026;2320,00;1434,95;885,05;3784,46
+
+DETTAGLIO MOVIMENTI
+Data;Giorno;Tipo;Categoria;Descrizione;Entrata (€);Uscita (€);Saldo progressivo (€)
+01/06/2026;Lunedì;Entrata;Stipendio;Stipendio giugno;2017,00;;2017,00
+01/06/2026;Lunedì;Uscita;Ristoranti e bar;Pizzeria da Gino;;17,50;1999,50
+01/06/2026;Lunedì;Uscita;Trasporti;Abbonamento mezzi;;35,00;1964,50
+02/06/2026;Martedì;Uscita;Abbonamenti;Palestra;;39,00;1925,50
+03/06/2026;Mercoledì;Uscita;Casa;Affitto;;650,00;1275,50
+03/06/2026;Mercoledì;Uscita;Spesa;Esselunga;;62,07;1213,43
+05/06/2026;Venerdì;Uscita;Abbonamenti;Netflix;;13,99;1199,44
+06/06/2026;Sabato;Uscita;Ristoranti e bar;Pizzeria da Gino;;46,50;1152,94
+08/06/2026;Lunedì;Uscita;Bollette;Luce;;88,72;1064,22
+09/06/2026;Martedì;Uscita;Spesa;Carrefour;;66,69;997,53
+09/06/2026;Martedì;Uscita;Trasporti;Benzina;;59,00;938,53
+10/06/2026;Mercoledì;Uscita;Abbonamenti;Spotify;;11,99;926,54
+10/06/2026;Mercoledì;Uscita;Istruzione;Corso di inglese;;120,00;806,54
+12/06/2026;Venerdì;Uscita;Bollette;Gas;;55,87;750,67
+12/06/2026;Venerdì;Uscita;Ristoranti e bar;Trattoria;;18,50;732,17
+15/06/2026;Lunedì;Uscita;Bollette;Internet fibra;;27,99;704,18
+18/06/2026;Giovedì;Uscita;Spesa;Conad;;91,62;612,56
+20/06/2026;Sabato;Uscita;Shopping;Amazon;;94,00;518,56
+21/06/2026;Domenica;Uscita;Ristoranti e bar;Colazione al bar;;31,50;487,06
+23/06/2026;Martedì;Uscita;Ristoranti e bar;Colazione al bar;;46,50;440,56
+25/06/2026;Giovedì;Uscita;Spesa;Carrefour;;73,73;366,83
+01/07/2026;Mercoledì;Entrata;Stipendio;Stipendio luglio;1999,00;;2365,83
+01/07/2026;Mercoledì;Uscita;Trasporti;Abbonamento mezzi;;35,00;2330,83
+02/07/2026;Giovedì;Uscita;Abbonamenti;Palestra;;39,00;2291,83
+02/07/2026;Giovedì;Uscita;Spesa;Lidl;;57,23;2234,60
+03/07/2026;Venerdì;Uscita;Casa;Affitto;;650,00;1584,60
+05/07/2026;Domenica;Uscita;Abbonamenti;Netflix;;13,99;1570,61
+08/07/2026;Mercoledì;Uscita;Bollette;Luce;;89,92;1480,69
+09/07/2026;Giovedì;Entrata;Rimborsi;Rimborso 730;85,00;;1565,69
+10/07/2026;Venerdì;Uscita;Abbonamenti;Spotify;;11,99;1553,70
+10/07/2026;Venerdì;Uscita;Spesa;Lidl;;69,32;1484,38
+10/07/2026;Venerdì;Uscita;Trasporti;Benzina;;72,00;1412,38
+12/07/2026;Domenica;Uscita;Bollette;Gas;;46,73;1365,65
+13/07/2026;Lunedì;Uscita;Ristoranti e bar;Colazione al bar;;25,50;1340,15
+15/07/2026;Mercoledì;Uscita;Bollette;Internet fibra;;27,99;1312,16
+15/07/2026;Mercoledì;Uscita;Salute;Farmacia;;24,00;1288,16
+16/07/2026;Giovedì;Uscita;Svago;Cinema;;9,50;1278,66
+18/07/2026;Sabato;Uscita;Spesa;Lidl;;53,93;1224,73
+18/07/2026;Sabato;Uscita;Regali;Regalo compleanno Marta;;45,00;1179,73
+19/07/2026;Domenica;Uscita;Shopping;Decathlon;;71,00;1108,73
+20/07/2026;Lunedì;Entrata;Freelance;Consulenza;414,00;;1522,73
+20/07/2026;Lunedì;Uscita;Ristoranti e bar;Pizzeria da Gino;;37,50;1485,23
+23/07/2026;Giovedì;Uscita;Ristoranti e bar;Trattoria;;28,50;1456,73
+24/07/2026;Venerdì;Uscita;Spesa;Conad;;69,56;1387,17
+01/08/2026;Sabato;Entrata;Stipendio;Stipendio agosto;1981,00;;3368,17
+01/08/2026;Sabato;Uscita;Trasporti;Abbonamento mezzi;;35,00;3333,17
+02/08/2026;Domenica;Uscita;Abbonamenti;Palestra;;39,00;3294,17
+03/08/2026;Lunedì;Uscita;Casa;Affitto;;650,00;2644,17
+03/08/2026;Lunedì;Uscita;Spesa;Carrefour;;94,15;2550,02
+05/08/2026;Mercoledì;Uscita;Abbonamenti;Netflix;;13,99;2536,03
+06/08/2026;Giovedì;Uscita;Ristoranti e bar;Colazione al bar;;33,50;2502,53
+07/08/2026;Venerdì;Uscita;Trasporti;Benzina;;74,00;2428,53
+08/08/2026;Sabato;Uscita;Bollette;Luce;;98,82;2329,71
+09/08/2026;Domenica;Uscita;Spesa;Lidl;;45,51;2284,20
+10/08/2026;Lunedì;Uscita;Abbonamenti;Spotify;;11,99;2272,21
+12/08/2026;Mercoledì;Uscita;Bollette;Gas;;37,22;2234,99
+14/08/2026;Venerdì;Uscita;Ristoranti e bar;Sushi;;30,50;2204,49
+15/08/2026;Sabato;Uscita;Bollette;Internet fibra;;27,99;2176,50
+18/08/2026;Martedì;Uscita;Spesa;Esselunga;;82,75;2093,75
+20/08/2026;Giovedì;Uscita;Shopping;IKEA;;88,00;2005,75
+21/08/2026;Venerdì;Uscita;Ristoranti e bar;Pizzeria da Gino;;29,50;1976,25
+21/08/2026;Venerdì;Uscita;Svago;Concerto;;68,00;1908,25
+24/08/2026;Lunedì;Uscita;Spesa;Coop;;71,54;1836,71
+26/08/2026;Mercoledì;Uscita;Ristoranti e bar;Pizzeria da Gino;;22,50;1814,21
+01/09/2026;Martedì;Entrata;Stipendio;Stipendio settembre;2043,00;;3857,21
+01/09/2026;Martedì;Uscita;Trasporti;Abbonamento mezzi;;35,00;3822,21
+02/09/2026;Mercoledì;Uscita;Abbonamenti;Palestra;;39,00;3783,21
+03/09/2026;Giovedì;Uscita;Casa;Affitto;;650,00;3133,21
+03/09/2026;Giovedì;Uscita;Ristoranti e bar;Sushi;;29,50;3103,71
+04/09/2026;Venerdì;Uscita;Spesa;Lidl;;48,15;3055,56
+05/09/2026;Sabato;Uscita;Abbonamenti;Netflix;;13,99;3041,57
+08/09/2026;Martedì;Uscita;Bollette;Luce;;99,88;2941,69
+08/09/2026;Martedì;Uscita;Trasporti;Benzina;;62,00;2879,69
+10/09/2026;Giovedì;Uscita;Abbonamenti;Spotify;;11,99;2867,70
+10/09/2026;Giovedì;Uscita;Spesa;Conad;;87,26;2780,44
+10/09/2026;Giovedì;Uscita;Salute;Farmacia;;15,00;2765,44
+12/09/2026;Sabato;Uscita;Bollette;Gas;;38,28;2727,16
+12/09/2026;Sabato;Uscita;Viaggi;Weekend a Roma;;320,00;2407,16
+15/09/2026;Martedì;Uscita;Bollette;Internet fibra;;27,99;2379,17
+17/09/2026;Giovedì;Uscita;Ristoranti e bar;Colazione al bar;;24,50;2354,67
+18/09/2026;Venerdì;Uscita;Spesa;Esselunga;;50,10;2304,57
+19/09/2026;Sabato;Uscita;Shopping;Amazon;;94,00;2210,57
+20/09/2026;Domenica;Entrata;Freelance;Consulenza;307,00;;2517,57
+21/09/2026;Lunedì;Uscita;Ristoranti e bar;Trattoria;;14,50;2503,07
+21/09/2026;Lunedì;Uscita;Ristoranti e bar;Sushi;;46,50;2456,57
+25/09/2026;Venerdì;Uscita;Spesa;Lidl;;45,19;2411,38
+28/09/2026;Lunedì;Uscita;Ristoranti e bar;Aperitivo;;35,50;2375,88
+01/10/2026;Giovedì;Entrata;Stipendio;Stipendio ottobre;1979,00;;4354,88
+01/10/2026;Giovedì;Uscita;Trasporti;Abbonamento mezzi;;35,00;4319,88
+02/10/2026;Venerdì;Uscita;Abbonamenti;Palestra;;39,00;4280,88
+03/10/2026;Sabato;Uscita;Casa;Affitto;;650,00;3630,88
+04/10/2026;Domenica;Uscita;Spesa;Lidl;;42,11;3588,77
+05/10/2026;Lunedì;Uscita;Abbonamenti;Netflix;;13,99;3574,78
+06/10/2026;Martedì;Uscita;Trasporti;Benzina;;77,00;3497,78
+08/10/2026;Giovedì;Uscita;Bollette;Luce;;64,06;3433,72
+10/10/2026;Sabato;Uscita;Abbonamenti;Spotify;;11,99;3421,73
+10/10/2026;Sabato;Uscita;Spesa;Coop;;52,73;3369,00
+11/10/2026;Domenica;Uscita;Ristoranti e bar;Colazione al bar;;24,50;3344,50
+12/10/2026;Lunedì;Uscita;Bollette;Gas;;40,68;3303,82
+12/10/2026;Lunedì;Uscita;Ristoranti e bar;Trattoria;;49,50;3254,32
+15/10/2026;Giovedì;Entrata;Investimenti;Cedola BTP;64,30;;3318,62
+15/10/2026;Giovedì;Uscita;Bollette;Internet fibra;;27,99;3290,63
+15/10/2026;Giovedì;Uscita;Ristoranti e bar;Aperitivo;;46,50;3244,13
+16/10/2026;Venerdì;Uscita;Spesa;Lidl;;93,77;3150,36
+16/10/2026;Venerdì;Uscita;Svago;Cinema;;9,50;3140,86
+18/10/2026;Domenica;Uscita;Ristoranti e bar;Colazione al bar;;8,50;3132,36
+21/10/2026;Mercoledì;Uscita;Shopping;Decathlon;;115,00;3017,36
+22/10/2026;Giovedì;Uscita;Ristoranti e bar;Sushi;;13,50;3003,86
+23/10/2026;Venerdì;Uscita;Spesa;Esselunga;;63,45;2940,41
+26/10/2026;Lunedì;Uscita;Salute;Farmacia;;41,00;2899,41
+01/11/2026;Domenica;Entrata;Stipendio;Stipendio novembre;2061,00;;4960,41
+01/11/2026;Domenica;Uscita;Trasporti;Abbonamento mezzi;;35,00;4925,41
+02/11/2026;Lunedì;Uscita;Abbonamenti;Palestra;;39,00;4886,41
+02/11/2026;Lunedì;Uscita;Spesa;Coop;;95,94;4790,47
+03/11/2026;Martedì;Uscita;Casa;Affitto;;650,00;4140,47
+04/11/2026;Mercoledì;Uscita;Ristoranti e bar;Trattoria;;9,50;4130,97
+05/11/2026;Giovedì;Uscita;Abbonamenti;Netflix;;13,99;4116,98
+08/11/2026;Domenica;Uscita;Bollette;Luce;;73,83;4043,15
+08/11/2026;Domenica;Uscita;Trasporti;Benzina;;72,00;3971,15
+10/11/2026;Martedì;Uscita;Abbonamenti;Spotify;;11,99;3959,16
+11/11/2026;Mercoledì;Uscita;Spesa;Carrefour;;90,96;3868,20
+12/11/2026;Giovedì;Uscita;Bollette;Gas;;72,79;3795,41
+12/11/2026;Giovedì;Uscita;Ristoranti e bar;Aperitivo;;24,50;3770,91
+15/11/2026;Domenica;Uscita;Bollette;Internet fibra;;27,99;3742,92
+15/11/2026;Domenica;Uscita;Ristoranti e bar;Colazione al bar;;8,50;3734,42
+16/11/2026;Lunedì;Uscita;Spesa;Carrefour;;55,78;3678,64
+20/11/2026;Venerdì;Entrata;Freelance;Consulenza;259,00;;3937,64
+20/11/2026;Venerdì;Uscita;Svago;Cinema;;9,50;3928,14
+21/11/2026;Sabato;Uscita;Salute;Farmacia;;33,00;3895,14
+22/11/2026;Domenica;Uscita;Shopping;IKEA;;39,00;3856,14
+23/11/2026;Lunedì;Uscita;Spesa;Coop;;71,68;3784,46
+TOTALE;;;;;13209,30;9424,84;3784,46

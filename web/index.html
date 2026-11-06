@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <!--
+    Segnaposto sostituito dal valore di `--base-href` in `flutter build web`.
+  -->
+  <base href="$FLUTTER_BASE_HREF">
+
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Financiee: entrate, spese, categorie e report delle tue finanze personali.">
+  <meta name="theme-color" content="#4F46E5">
+
+  <!-- iOS meta tags & icons -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Financiee">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+
+  <link rel="icon" type="image/png" href="favicon.png"/>
+
+  <title>Financiee</title>
+  <link rel="manifest" href="manifest.json">
+
+  <style>
+    html, body { margin: 0; height: 100%; background: #F4F5FB; }
+    @media (prefers-color-scheme: dark) { html, body { background: #0E0F1A; } }
+    #splash {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      transition: opacity .3s ease;
+    }
+    #splash .logo {
+      width: 72px; height: 72px; border-radius: 22px;
+      background: linear-gradient(135deg, #4338CA, #6D28D9, #9333EA);
+      box-shadow: 0 14px 32px rgba(124, 58, 237, .35);
+      animation: pulse 1.2s ease-in-out infinite alternate;
+    }
+    @keyframes pulse { from { transform: scale(.92); } to { transform: scale(1.04); } }
+  </style>
+</head>
+<body>
+  <div id="splash"><div class="logo"></div></div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var s = document.getElementById('splash');
+      if (s) { s.style.opacity = '0'; setTimeout(function () { s.remove(); }, 300); }
+    });
+  </script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>
