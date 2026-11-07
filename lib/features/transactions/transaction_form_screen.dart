@@ -9,6 +9,7 @@ import '../../data/models.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy.dart';
 import '../accounts/account_editor_sheet.dart';
 import '../categories/category_editor_sheet.dart';
 
@@ -866,8 +867,8 @@ class AccountPicker extends StatelessWidget {
                               : FontWeight.w600,
                         ),
                       ),
-                      Text(
-                        formatMoney(balances[a.id] ?? a.initialBalanceCents),
+                      SensitiveAmount(
+                        cents: balances[a.id] ?? a.initialBalanceCents,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),

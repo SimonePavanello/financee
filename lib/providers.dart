@@ -46,6 +46,45 @@ final themeModeProvider =
     NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
 
 // -----------------------------------------------------------------------------
+// Privacy: saldi nascosti
+// -----------------------------------------------------------------------------
+
+const _hideOnStartKey = 'hide_balances_on_start';
+
+/// Impostazione salvata: all'apertura dell'app saldi e conti sono nascosti.
+class HideBalancesOnStartNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.watch(sharedPreferencesProvider).getBool(_hideOnStartKey) ?? true;
+
+  void set(bool value) {
+    state = value;
+    ref.read(sharedPreferencesProvider).setBool(_hideOnStartKey, value);
+    // Applica subito la scelta anche alla sessione in corso.
+    ref.read(balancesHiddenProvider.notifier).set(value);
+  }
+}
+
+final hideBalancesOnStartProvider =
+    NotifierProvider<HideBalancesOnStartNotifier, bool>(
+  HideBalancesOnStartNotifier.new,
+);
+
+/// Stato della sessione: `true` se saldi e conti sono coperti da "••••".
+/// Parte dall'impostazione salvata; l'icona a occhio lo inverte.
+class BalancesHiddenNotifier extends Notifier<bool> {
+  @override
+  bool build() =>
+      ref.read(sharedPreferencesProvider).getBool(_hideOnStartKey) ?? true;
+
+  void toggle() => state = !state;
+  void set(bool value) => state = value;
+}
+
+final balancesHiddenProvider =
+    NotifierProvider<BalancesHiddenNotifier, bool>(BalancesHiddenNotifier.new);
+
+// -----------------------------------------------------------------------------
 // Conti
 // -----------------------------------------------------------------------------
 

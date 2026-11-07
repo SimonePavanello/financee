@@ -120,6 +120,32 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 const SizedBox(height: 20),
                 AppCard(
+                  padding: const EdgeInsets.fromLTRB(12, 20, 12, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 8),
+                        child: SectionHeader(
+                          title: 'Privacy',
+                          subtitle: 'Saldi e conti coperti da •••• finché non tocchi l\'occhio',
+                        ),
+                      ),
+                      SwitchListTile(
+                        secondary: const Icon(Icons.visibility_off_rounded),
+                        title: const Text('Nascondi saldi all\'avvio'),
+                        subtitle: const Text(
+                          'Saldo del mese, patrimonio e saldi dei conti non sono in chiaro quando apri l\'app',
+                        ),
+                        value: ref.watch(hideBalancesOnStartProvider),
+                        onChanged: (v) =>
+                            ref.read(hideBalancesOnStartProvider.notifier).set(v),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                AppCard(
                   padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,

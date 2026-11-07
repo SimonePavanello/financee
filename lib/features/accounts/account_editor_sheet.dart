@@ -9,6 +9,7 @@ import '../../data/app_database.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy.dart';
 import 'delete_account_flow.dart';
 
 /// Apre l'editor di conto. Restituisce l'id del conto salvato.
@@ -161,8 +162,9 @@ class _AccountEditorSheetState extends ConsumerState<AccountEditorSheet> {
                     ),
                   ),
                   if (balance != null)
-                    Text(
-                      'Saldo attuale ${formatMoney(balance)}',
+                    SensitiveText(
+                      visibleText: 'Saldo attuale ${formatMoney(balance)}',
+                      hiddenText: 'Saldo attuale $kHiddenAmount',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: balance < 0
                             ? AppColors.expense

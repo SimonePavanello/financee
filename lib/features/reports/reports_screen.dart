@@ -8,6 +8,7 @@ import '../../domain/analytics.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy.dart';
 import '../dashboard/dashboard_widgets.dart';
 import 'csv_report_builder.dart';
 import 'export/file_export.dart';
@@ -577,6 +578,8 @@ class _AccountsCard extends StatelessWidget {
               title: 'Conti',
               subtitle:
                   'Patrimonio da ${formatMoney(start)} a ${formatMoney(end)}',
+              hiddenSubtitle: 'Patrimonio da $kHiddenAmount a $kHiddenAmount',
+              trailing: const PrivacyToggleButton(size: 20),
             ),
           ),
           const SizedBox(height: 8),
@@ -612,8 +615,8 @@ class _AccountsCard extends StatelessWidget {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(
-                        formatMoney(a.endCents),
+                      SensitiveAmount(
+                        cents: a.endCents,
                         style: theme.textTheme.bodyMedium?.copyWith(
                           fontWeight: FontWeight.w800,
                           color: a.endCents < 0 ? AppColors.expense : null,

@@ -49,6 +49,10 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   verifica che i saldi finali coincidano con quelli di Sossoldi. La mappatura
   è in `lib/data/import/sossoldi_import.dart`. Per provarlo senza toccare
   nulla: `dart run tool/verify_sossoldi_import.dart <export.csv>`.
+- **Privacy**: saldo del mese, patrimonio e saldi dei conti compaiono come
+  `•••• €` all'apertura (disattivabile in Impostazioni → Privacy). L'icona a
+  occhio, o un tocco su un importo nascosto, li mostra; un altro tocco
+  sull'occhio li ricopre. Movimenti e statistiche restano visibili.
 - Tema chiaro, scuro o di sistema; layout adattivo (barra in basso su telefono,
   barra laterale su tablet e desktop); dati di esempio per provare l'app.
 

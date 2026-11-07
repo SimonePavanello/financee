@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/theme/app_colors.dart';
+import 'privacy.dart';
 
 /// Contenitore che limita la larghezza del contenuto sugli schermi larghi.
 class PageContainer extends StatelessWidget {
@@ -76,11 +77,16 @@ class SectionHeader extends StatelessWidget {
     super.key,
     required this.title,
     this.subtitle,
+    this.hiddenSubtitle,
     this.trailing,
   });
 
   final String title;
   final String? subtitle;
+
+  /// Sottotitolo da mostrare al posto di [subtitle] quando la modalità
+  /// privacy nasconde i saldi.
+  final String? hiddenSubtitle;
   final Widget? trailing;
 
   @override
@@ -100,8 +106,9 @@ class SectionHeader extends StatelessWidget {
               if (subtitle != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    subtitle!,
+                  child: SensitiveText(
+                    visibleText: subtitle!,
+                    hiddenText: hiddenSubtitle ?? subtitle!,
                     style: theme.textTheme.bodySmall?.copyWith(
                       color: theme.colorScheme.onSurfaceVariant,
                     ),

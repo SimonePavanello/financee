@@ -8,6 +8,7 @@ import '../../domain/analytics.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy.dart';
 import '../../widgets/transaction_tile.dart';
 
 /// Card principale con gradiente: saldo del mese, entrate e uscite.
@@ -51,7 +52,7 @@ class BalanceCard extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Expanded(
+                      Flexible(
                         child: Text(
                           'Saldo di $monthName',
                           style: theme.textTheme.titleSmall?.copyWith(
@@ -60,6 +61,11 @@ class BalanceCard extends StatelessWidget {
                           ),
                         ),
                       ),
+                      PrivacyToggleButton(
+                        color: Colors.white.withValues(alpha: 0.85),
+                        size: 20,
+                      ),
+                      const Spacer(),
                       if (rate != null)
                         _GlassPill(
                           icon: Icons.savings_rounded,
@@ -71,7 +77,7 @@ class BalanceCard extends StatelessWidget {
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     alignment: Alignment.centerLeft,
-                    child: _AnimatedMoney(
+                    child: _SensitiveAnimatedMoney(
                       cents: s.balanceCents,
                       style: theme.textTheme.displaySmall?.copyWith(
                         color: Colors.white,
@@ -228,7 +234,7 @@ class _FlowTile extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
-                  child: _AnimatedMoney(
+                  child: _SensitiveAnimatedMoney(
                     cents: cents,
                     style: theme.textTheme.titleMedium?.copyWith(
                       color: Colors.white,
@@ -243,6 +249,21 @@ class _FlowTile extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Importo animato che rispetta la modalità privacy.
+class _SensitiveAnimatedMoney extends StatelessWidget {
+  const _SensitiveAnimatedMoney({required this.cents, this.style});
+
+  final int cents;
+  final TextStyle? style;
+
+  @override
+  Widget build(BuildContext context) => SensitiveAmount(
+        cents: cents,
+        style: style,
+        builder: (_) => _AnimatedMoney(cents: cents, style: style),
+      );
 }
 
 class _AnimatedMoney extends StatelessWidget {
@@ -699,9 +720,16 @@ class AccountsOverviewCard extends StatelessWidget {
             child: SectionHeader(
               title: 'I tuoi conti',
               subtitle: 'Patrimonio ${formatMoney(total)}',
-              trailing: TextButton(
-                onPressed: onManage,
-                child: const Text('Gestisci'),
+              hiddenSubtitle: 'Patrimonio $kHiddenAmount',
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const PrivacyToggleButton(size: 20),
+                  TextButton(
+                    onPressed: onManage,
+                    child: const Text('Gestisci'),
+                  ),
+                ],
               ),
             ),
           ),
@@ -725,8 +753,8 @@ class AccountsOverviewCard extends StatelessWidget {
                             ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ),
-                    Text(
-                      formatMoney(balanceOf(a)),
+                    SensitiveAmount(
+                      cents: balanceOf(a),
                       style: theme.textTheme.bodyMedium?.copyWith(
                         fontWeight: FontWeight.w800,
                         color: balanceOf(a) < 0 ? AppColors.expense : null,

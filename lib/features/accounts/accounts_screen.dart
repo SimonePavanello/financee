@@ -7,6 +7,7 @@ import '../../data/app_database.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
+import '../../widgets/privacy.dart';
 import '../transactions/transaction_form_screen.dart';
 import 'account_editor_sheet.dart';
 
@@ -23,7 +24,10 @@ class AccountsScreen extends ConsumerWidget {
     final usage = ref.watch(accountUsageProvider).asData?.value ?? const {};
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Conti')),
+      appBar: AppBar(
+        title: const Text('Conti'),
+        actions: const [PrivacyToggleButton(), SizedBox(width: 8)],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         heroTag: 'add-account',
         onPressed: () => showAccountEditor(context),
@@ -135,8 +139,8 @@ class _NetWorthCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                formatMoney(totalCents),
+              SensitiveAmount(
+                cents: totalCents,
                 style: theme.textTheme.displaySmall?.copyWith(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -205,8 +209,8 @@ class _AccountCard extends StatelessWidget {
                       ?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  formatMoney(balance),
+                SensitiveAmount(
+                  cents: balance,
                   style: theme.textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w800,
                     color: balance < 0 ? AppColors.expense : null,
