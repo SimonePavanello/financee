@@ -290,3 +290,14 @@ class LegendDot extends StatelessWidget {
         ],
       );
 }
+
+/// `true` per l'etichetta dell'asse sul minimo o sul massimo del grafico
+/// quando non cade su un multiplo dell'intervallo: finirebbe sovrapposta a
+/// quella vicina (es. "1,1k" appena sopra "1k").
+bool isAxisEdgeLabel(double value, TitleMeta meta) {
+  if (value != meta.max && value != meta.min) return false;
+  final step = meta.appliedInterval;
+  if (step <= 0) return false;
+  final steps = value / step;
+  return (steps - steps.roundToDouble()).abs() > 1e-6;
+}

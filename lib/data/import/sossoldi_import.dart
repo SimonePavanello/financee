@@ -525,6 +525,7 @@ extension SossoldiImport on AppDatabase {
     await transaction(() async {
       if (plan.replaceExisting) {
         await deleteAllMovements();
+        await delete(savingsGoals).go();
         await delete(accounts).go();
       }
 

@@ -5,11 +5,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/app_database.dart';
 import '../../domain/meal_vouchers.dart';
+import '../../domain/savings_goals.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
 import '../debts/debt_widgets.dart';
+import '../goals/goal_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 import '../transactions/transaction_form_screen.dart';
 import 'account_editor_sheet.dart';
@@ -26,6 +28,10 @@ class AccountsScreen extends ConsumerWidget {
     final balances = ref.watch(accountBalancesProvider).asData?.value ?? const {};
     final usage = ref.watch(accountUsageProvider).asData?.value ?? const {};
     final voucherValue = ref.watch(mealVoucherValueProvider);
+    final goals = {
+      for (final g in ref.watch(savingsGoalsProvider).asData?.value ?? const [])
+        g.accountId: g,
+    };
 
     return Scaffold(
       appBar: AppBar(
@@ -84,6 +90,7 @@ class AccountsScreen extends ConsumerWidget {
                                       a.kind == AccountKind.mealVoucher
                                           ? voucherValue
                                           : null,
+                                  goal: goals[a.id],
                                   onTap: () => onShowMovements(a.id),
                                 ),
                               ),
@@ -91,6 +98,8 @@ class AccountsScreen extends ConsumerWidget {
                         );
                       },
                     ),
+                    const SizedBox(height: 32),
+                    const SavingsGoalsSection(),
                     const SizedBox(height: 32),
                     const DebtsSection(),
                   ],
@@ -190,12 +199,16 @@ class _AccountCard extends StatelessWidget {
     required this.usage,
     required this.onTap,
     this.voucherValueCents,
+    this.goal,
   });
 
   final AccountEntity account;
   final int balance;
   final int usage;
   final VoidCallback onTap;
+
+  /// Obiettivo di risparmio del conto, se c'è.
+  final GoalSummary? goal;
 
   /// Valorizzato solo per il conto dei buoni pasto: il saldo si mostra anche
   /// come numero di buoni.
@@ -246,6 +259,41 @@ class _AccountCard extends StatelessWidget {
                         '${formatVoucherCount(balance, voucherValue)} · $details',
                     hiddenText: 'Buoni pasto · $details',
                     style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                  ),
+                if (goal case final g?)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6),
+                    child: InkWell(
+                      onTap: () => openGoalDetail(context, g.id),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Row(
+                        children: [
+                          Icon(
+                            g.isReached
+                                ? Icons.verified_rounded
+                                : Icons.flag_rounded,
+                            size: 14,
+                            color: g.isReached
+                                ? AppColors.income
+                                : Color(account.color),
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              g.isReached
+                                  ? '${g.goal.name}: raggiunto'
+                                  : '${g.goal.name}: ${formatPercent(g.progress)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: theme.textTheme.labelSmall?.copyWith(
+                                color: g.isReached ? AppColors.income : muted,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
               ],
             ),

@@ -45,6 +45,7 @@ Future<bool?> openTransferForm(
   BuildContext context, {
   TransferWithAccounts? existing,
   int? fromAccountId,
+  int? toAccountId,
 }) =>
     _open(
       context,
@@ -52,6 +53,7 @@ Future<bool?> openTransferForm(
         existingTransfer: existing,
         initialKind: MovementKind.transfer,
         initialAccountId: fromAccountId,
+        initialToAccountId: toAccountId,
       ),
     );
 
@@ -74,6 +76,7 @@ class MovementFormScreen extends ConsumerStatefulWidget {
     this.existingTransfer,
     this.initialKind = MovementKind.expense,
     this.initialAccountId,
+    this.initialToAccountId,
     this.initialDebtId,
   });
 
@@ -83,6 +86,10 @@ class MovementFormScreen extends ConsumerStatefulWidget {
 
   /// Conto preselezionato (es. aprendo il form da un conto filtrato).
   final int? initialAccountId;
+
+  /// Conto di destinazione preselezionato per un trasferimento (es. dal
+  /// dettaglio di un obiettivo di risparmio).
+  final int? initialToAccountId;
 
   /// Debito preselezionato (aprendo il form dal dettaglio di un debito).
   final int? initialDebtId;
@@ -155,6 +162,7 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
       _toId = tr.to.id;
     } else if (_isTransfer) {
       _fromId = widget.initialAccountId;
+      _toId = widget.initialToAccountId;
     } else {
       _accountId = widget.initialAccountId;
       _debtId = widget.initialDebtId;

@@ -6,6 +6,7 @@ import 'package:financiee/data/app_database.dart';
 import 'package:financiee/data/default_categories.dart';
 import 'package:financiee/data/models.dart';
 import 'package:financiee/data/sample_data.dart';
+import 'package:financiee/domain/savings_goals.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
@@ -581,6 +582,151 @@ void main() {
     await migrated.close();
     await dir.delete(recursive: true);
   });
+
+  group('obiettivi di risparmio', () {
+    test('variazioni del conto coerenti con il saldo, buoni compresi', () async {
+      final main = (await db.getAccounts()).single.id;
+      final savings = await db.createAccount(
+        name: 'Risparmi',
+        iconKey: 'piggy',
+        color: 0xFF10B981,
+        initialBalanceCents: 100000,
+      );
+      final vouchers = await db.enableMealVouchers();
+      await db.addTransfer(
+        fromAccountId: main,
+        toAccountId: savings,
+        amountCents: 30000,
+        date: DateTime(2026, 9, 15),
+      );
+      await db.addTransfer(
+        fromAccountId: savings,
+        toAccountId: main,
+        amountCents: 5000,
+        date: DateTime(2026, 10, 2),
+      );
+      await db.addTransaction(
+        type: TxType.income,
+        amountCents: 2000,
+        categoryId: (await cat('Altre entrate')).id,
+        accountId: savings,
+        date: DateTime(2026, 10, 20),
+      );
+      // Spesa divisa: 40 € dal conto risparmi e 140 € dai buoni.
+      await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 18000,
+        categoryId: (await cat('Spesa')).id,
+        accountId: savings,
+        voucherAccountId: vouchers,
+        voucherCents: 14000,
+        date: DateTime(2026, 11, 3),
+      );
+      final id = await db.createSavingsGoal(
+        accountId: savings,
+        name: 'Fondo emergenza',
+        targetCents: 500000,
+        deadline: DateTime(2027, 12, 31, 18),
+      );
+      await db.createSavingsGoal(
+        accountId: vouchers,
+        name: 'Buoni',
+        targetCents: 1000,
+      );
+
+      final goal = (await db.getSavingsGoals()).firstWhere((g) => g.id == id);
+      expect(goal.deadline, DateTime(2027, 12, 31));
+      final deltas = await db.watchGoalAccountDeltas().first;
+      expect(deltas[savings], [
+        (DateTime(2026, 9, 15), 30000),
+        (DateTime(2026, 10, 2), -5000),
+        (DateTime(2026, 10, 20), 2000),
+        (DateTime(2026, 11, 3), -4000),
+      ]);
+      expect(deltas[vouchers], [(DateTime(2026, 11, 3), -14000)]);
+      expect(deltas.containsKey(main), isFalse);
+      final balances = await db.watchAccountBalances().first;
+      final summaries = GoalSummary.combine(
+        goals: await db.getSavingsGoals(),
+        accounts: await db.getAccounts(),
+        deltas: deltas,
+        today: DateTime(2026, 11, 8),
+      );
+      expect(summaries, hasLength(2));
+      for (final s in summaries) {
+        expect(s.balanceCents, balances[s.accountId], reason: s.account.name);
+      }
+      // Un conto ha al massimo un obiettivo.
+      await expectLater(
+        db.createSavingsGoal(accountId: savings, name: 'Altro', targetCents: 1),
+        throwsA(anything),
+      );
+    });
+
+    test('unendo i conti l\'obiettivo passa al conto rimasto', () async {
+      final main = (await db.getAccounts()).single.id;
+      final a = await db.createAccount(name: 'Vacanze', iconKey: 'travel', color: 0);
+      final b = await db.createAccount(name: 'Auto', iconKey: 'car', color: 0);
+      await db.createSavingsGoal(accountId: a, name: 'Giappone', targetCents: 300000);
+      await db.createSavingsGoal(accountId: b, name: 'Auto nuova', targetCents: 900000);
+      // Il conto principale non ha obiettivi: quello di "Vacanze" passa lì.
+      await db.deleteAccount(a, mergeInto: main);
+      var goals = await db.getSavingsGoals();
+      expect(
+        goals.map((g) => (g.name, g.accountId)),
+        containsAll([('Giappone', main), ('Auto nuova', b)]),
+      );
+      // Ora il conto principale ne ha già uno: quello di "Auto" si elimina.
+      await db.deleteAccount(b, mergeInto: main);
+      goals = await db.getSavingsGoals();
+      expect(goals.single.name, 'Giappone');
+      final c = await db.createAccount(name: 'Vuoto', iconKey: 'bank', color: 0);
+      await db.createSavingsGoal(accountId: c, name: 'Prova', targetCents: 100);
+      await db.deleteAccount(c);
+      expect((await db.getSavingsGoals()).single.name, 'Giappone');
+    });
+  });
+
+  test('migrazione v4 -> v5: obiettivi utilizzabili, dati invariati', () async {
+    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final file = File('${dir.path}/v4.sqlite');
+    final raw = sqlite3.open(file.path);
+    raw.execute(_schemaV4);
+    raw.execute(
+      "INSERT INTO categories (id, name, type, icon_key, color) "
+      "VALUES (1, 'Spesa', 0, 'cart', 4280401502)",
+    );
+    raw.execute(
+      "INSERT INTO accounts (id, name, icon_key, color, initial_balance_cents, kind) "
+      "VALUES (1, 'Conto principale', 'bank', 4284703473, 10000, 0), "
+      "(2, 'Risparmi', 'piggy', 4279286145, 250000, 0)",
+    );
+    raw.execute(
+      "INSERT INTO debts (id, name, amount_cents, icon_key, color) "
+      "VALUES (1, 'Prestito', 100000, 'loan', 4294198366)",
+    );
+    raw.execute(
+      "INSERT INTO transactions (type, amount_cents, category_id, account_id, debt_id, date, note) "
+      "VALUES (0, 25000, 1, 1, 1, 1793833200, 'Rata')",
+    );
+    raw.execute('PRAGMA user_version = 4');
+    raw.close();
+
+    final migrated = AppDatabase(NativeDatabase(file));
+    expect((await migrated.watchDebtPayments().first)[1]?.paidCents, 25000);
+    expect(await migrated.getSavingsGoals(), isEmpty);
+    await migrated.createSavingsGoal(accountId: 2, name: 'Casa', targetCents: 1000000);
+    final goals = GoalSummary.combine(
+      goals: await migrated.getSavingsGoals(),
+      accounts: await migrated.getAccounts(),
+      deltas: await migrated.watchGoalAccountDeltas().first,
+      today: DateTime(2026, 11, 8),
+    );
+    expect(goals.single.balanceCents, 250000);
+    expect(goals.single.progress, closeTo(0.25, 1e-9));
+    await migrated.close();
+    await dir.delete(recursive: true);
+  });
 }
 
 const _schemaV1 = '''
@@ -603,6 +749,17 @@ const _schemaV3 = '''
 CREATE TABLE "accounts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "initial_balance_cents" INTEGER NOT NULL DEFAULT 0, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), "kind" INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "account_id" INTEGER NOT NULL REFERENCES accounts (id), "voucher_account_id" INTEGER NULL REFERENCES accounts (id), "voucher_cents" INTEGER NOT NULL DEFAULT 0, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from_account_id" INTEGER NOT NULL REFERENCES accounts (id), "to_account_id" INTEGER NOT NULL REFERENCES accounts (id), "amount_cents" INTEGER NOT NULL, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE INDEX transactions_date_idx ON transactions (date);
+CREATE INDEX transactions_account_idx ON transactions (account_id);
+CREATE INDEX transfers_date_idx ON transfers (date);
+''';
+
+const _schemaV4 = '''
+CREATE TABLE "accounts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "initial_balance_cents" INTEGER NOT NULL DEFAULT 0, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), "kind" INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "debts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "amount_cents" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "account_id" INTEGER NOT NULL REFERENCES accounts (id), "voucher_account_id" INTEGER NULL REFERENCES accounts (id), "voucher_cents" INTEGER NOT NULL DEFAULT 0, "debt_id" INTEGER NULL REFERENCES debts (id), "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from_account_id" INTEGER NOT NULL REFERENCES accounts (id), "to_account_id" INTEGER NOT NULL REFERENCES accounts (id), "amount_cents" INTEGER NOT NULL, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE INDEX transactions_date_idx ON transactions (date);
 CREATE INDEX transactions_account_idx ON transactions (account_id);

@@ -9,6 +9,7 @@ import '../../core/utils/formatters.dart';
 import '../../domain/debts.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
+import '../../widgets/charts.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
 import '../../widgets/transaction_tile.dart';
@@ -389,10 +390,12 @@ class _DebtChart extends ConsumerWidget {
               sideTitles: SideTitles(
                 showTitles: !hidden,
                 reservedSize: 44,
-                getTitlesWidget: (value, meta) => SideTitleWidget(
-                  meta: meta,
-                  child: Text(formatCompactEuro(value), style: labelStyle),
-                ),
+                getTitlesWidget: (value, meta) => isAxisEdgeLabel(value, meta)
+                    ? const SizedBox.shrink()
+                    : SideTitleWidget(
+                        meta: meta,
+                        child: Text(formatCompactEuro(value), style: labelStyle),
+                      ),
               ),
             ),
             bottomTitles: AxisTitles(

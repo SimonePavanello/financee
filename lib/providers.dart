@@ -10,6 +10,7 @@ import 'data/models.dart';
 import 'domain/analytics.dart';
 import 'domain/debts.dart';
 import 'domain/meal_vouchers.dart';
+import 'domain/savings_goals.dart';
 
 // -----------------------------------------------------------------------------
 // Infrastruttura
@@ -87,6 +88,51 @@ final balancesHiddenProvider =
     NotifierProvider<BalancesHiddenNotifier, bool>(BalancesHiddenNotifier.new);
 
 // -----------------------------------------------------------------------------
+// Backup
+// -----------------------------------------------------------------------------
+
+/// Data dell'ultimo backup esportato (o ripristinato), `null` se mai fatto.
+class LastBackupNotifier extends Notifier<DateTime?> {
+  static const _key = 'last_backup_at';
+
+  @override
+  DateTime? build() {
+    final saved = ref.watch(sharedPreferencesProvider).getString(_key);
+    return saved == null ? null : DateTime.tryParse(saved);
+  }
+
+  void set(DateTime date) {
+    state = date;
+    ref.read(sharedPreferencesProvider).setString(_key, date.toIso8601String());
+  }
+}
+
+final lastBackupProvider =
+    NotifierProvider<LastBackupNotifier, DateTime?>(LastBackupNotifier.new);
+
+/// Fino a quando non mostrare il promemoria del backup in dashboard.
+class BackupReminderSnoozeNotifier extends Notifier<DateTime?> {
+  static const _key = 'backup_reminder_snoozed_until';
+
+  @override
+  DateTime? build() {
+    final saved = ref.watch(sharedPreferencesProvider).getString(_key);
+    return saved == null ? null : DateTime.tryParse(saved);
+  }
+
+  void snooze(Duration duration) {
+    final until = DateTime.now().add(duration);
+    state = until;
+    ref.read(sharedPreferencesProvider).setString(_key, until.toIso8601String());
+  }
+}
+
+final backupReminderSnoozeProvider =
+    NotifierProvider<BackupReminderSnoozeNotifier, DateTime?>(
+  BackupReminderSnoozeNotifier.new,
+);
+
+// -----------------------------------------------------------------------------
 // Conti
 // -----------------------------------------------------------------------------
 
@@ -136,6 +182,28 @@ final mealVoucherAccountProvider = Provider<AccountEntity?>(
       .where((a) => a.kind == AccountKind.mealVoucher)
       .firstOrNull,
 );
+
+// -----------------------------------------------------------------------------
+// Obiettivi di risparmio
+// -----------------------------------------------------------------------------
+
+/// Obiettivi con il saldo del conto e il ritmo di risparmio: prima quelli
+/// da raggiungere.
+final savingsGoalsProvider = StreamProvider<List<GoalSummary>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return combineLatestAll([
+    db.watchSavingsGoals(),
+    db.watchAccounts(),
+    db.watchGoalAccountDeltas(),
+  ]).map(
+    (v) => GoalSummary.combine(
+      goals: v[0] as List<SavingsGoalEntity>,
+      accounts: v[1] as List<AccountEntity>,
+      deltas: v[2] as Map<int, List<BalanceDelta>>,
+      today: DateTime.now(),
+    ),
+  );
+});
 
 // -----------------------------------------------------------------------------
 // Debiti

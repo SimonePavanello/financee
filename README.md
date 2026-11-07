@@ -35,6 +35,29 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   collegati (da cui puoi anche registrarne uno nuovo). In dashboard compaiono
   i debiti ancora da estinguere. Eliminando un debito i pagamenti restano tra
   i movimenti. Gli importi dei debiti seguono la modalità privacy.
+- **Obiettivi di risparmio** (scheda Conti → Obiettivi di risparmio): dai a
+  un conto un traguardo per il suo saldo, con nome e scadenza facoltativa
+  (es. "Fondo emergenza", 5.000 € su "Risparmi" entro il 31/12/2027). Quanto
+  hai messo da parte è il saldo del conto: l'obiettivo mostra percentuale,
+  barra e quanto manca, quanto serve al mese per arrivare alla scadenza e il
+  ritmo degli ultimi 3 mesi, con lo stato ("Sei in linea", "In ritardo",
+  "Saldo fermo", "Raggiunto") e la data in cui ci arrivi a quel ritmo. Il
+  dettaglio ha il grafico del saldo nell'ultimo anno con la linea
+  dell'obiettivo e "Aggiungi soldi" (un trasferimento verso quel conto).
+  Ogni conto ha al massimo un obiettivo; gli obiettivi compaiono anche in
+  dashboard e sulla card del conto. Unendo due conti l'obiettivo passa al
+  conto rimasto, se non ne ha già uno.
+- **Backup e ripristino** (Impostazioni → Backup): "Esporta backup" salva un
+  file `financiee-backup-AAAA-MM-GG.json` con tutti i dati (conti, categorie,
+  movimenti, trasferimenti, debiti, obiettivi e valore del buono pasto); sul
+  web si scarica, su Android si condivide (Drive, email, "Salva in File").
+  "Ripristina da un backup" mostra prima cosa contiene il file (conti,
+  movimenti, periodo) e lo confronta con i dati attuali, poi sostituisce
+  tutto in un'unica transazione: se il file è danneggiato o ha riferimenti
+  non validi non cambia nulla. Prima del ripristino scarica, se vuoi, un
+  backup dei dati attuali. Se il backup manca o ha più di 30 giorni, la
+  dashboard lo ricorda (rimandabile di una settimana). I backup di versioni
+  precedenti si ripristinano anche nelle versioni successive dell'app.
 - **Movimenti**: inserimento rapido di entrate, spese e trasferimenti (importo,
   conto, categoria, data, descrizione), lista raggruppata per giorno con
   totale giornaliero, ricerca, filtri Entrate/Uscite/Trasferimenti e per conto
@@ -90,15 +113,21 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 
 Gli importi sono salvati in **centesimi interi** (niente errori di arrotondamento).
 
-Schema del database (versione 4): `accounts` (con il tipo: normale o buoni
+Schema del database (versione 5): `accounts` (con il tipo: normale o buoni
 pasto), `categories`, `debts` (debiti con l'importo da restituire),
 `transactions` (entrate/uscite, ciascuna con conto e categoria; una spesa può
 avere una parte `voucher_cents` pagata dal conto dei buoni
 `voucher_account_id` ed essere il pagamento di un debito `debt_id`),
-`transfers` (da conto → a conto). L'aggiornamento dalle versioni precedenti è
-automatico (coperto da test di migrazione): dalla 1 i movimenti già
-registrati finiscono in "Conto principale"; dalla 2 e dalla 3 conti e
-movimenti restano com'erano, senza buoni né debiti.
+`transfers` (da conto → a conto), `savings_goals` (obiettivo di un conto:
+saldo da raggiungere e scadenza facoltativa). L'aggiornamento dalle versioni
+precedenti è automatico (coperto da test di migrazione): dalla 1 i movimenti
+già registrati finiscono in "Conto principale"; dalla 2, 3 e 4 conti e
+movimenti restano com'erano, senza buoni, debiti o obiettivi.
+
+Il file di backup è JSON: per ogni tabella i nomi delle colonne e le righe
+così come sono nel database (date in secondi dal 1970), più la versione dello
+schema da cui è stato creato. Formato e ripristino sono in
+`lib/data/backup/backup.dart`.
 
 ## Struttura
 
@@ -108,13 +137,15 @@ lib/
   core/theme/                           colori e tema
   core/utils/                           formattazione italiana, periodi, icone/colori categorie
   data/                                 database Drift, categorie predefinite, dati di esempio
-  domain/analytics.dart                 calcoli: riepiloghi, categorie, andamento mensile
+  data/backup/                          formato del backup, esportazione e ripristino
+  domain/                               calcoli: riepiloghi, debiti, obiettivi, buoni pasto
   features/
     dashboard/  transactions/  accounts/  categories/  reports/  settings/  shell/
+    backup/  debts/  goals/  meal_vouchers/
   widgets/                              componenti condivisi (card, grafici, righe movimento)
 web/sqlite3.wasm, web/drift_worker.js   database sul web
 tool/                                   sorgente del worker Drift, generatore CSV di esempio
-test/                                   test di logica, CSV e database
+test/                                   test di logica, CSV, database e backup
 ```
 
 ## Avvio
@@ -134,7 +165,7 @@ test/                                   test di logica, CSV e database
 ```bash
 flutter pub get
 dart run build_runner build --delete-conflicting-outputs   # dopo modifiche alle tabelle
-dart test                                                  # test (logica, CSV, database)
+dart test                                                  # test (logica, CSV, database, backup)
 flutter build web --no-tree-shake-icons                    # build web in build/web
 flutter run -d edge                                        # web in sviluppo
 flutter run                                                # Android (serve Android Studio/SDK)
@@ -163,6 +194,6 @@ dalle release di [sqlite3.dart](https://github.com/simolus3/sqlite3.dart/release
 
 ## Prossimi passi possibili
 
-Conti multipli (contanti, carta, banca) e trasferimenti, movimenti ricorrenti,
-budget mensili per categoria con avvisi, import CSV/estratti conto,
-sottocategorie, backup/sincronizzazione, blocco con PIN/biometria, iOS.
+Movimenti ricorrenti, budget mensili per categoria con avvisi, crediti
+(soldi prestati), import CSV/estratti conto, sottocategorie,
+sincronizzazione tra dispositivi, blocco con PIN/biometria, iOS.

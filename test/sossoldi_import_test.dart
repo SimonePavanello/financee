@@ -118,7 +118,9 @@ void main() {
     });
 
     test('sostituendo i dati i saldi tornano esattamente', () async {
-      await db.createAccount(name: 'Contanti', iconKey: 'cash', color: 0, initialBalanceCents: 999);
+      final cash = await db.createAccount(name: 'Contanti', iconKey: 'cash', color: 0, initialBalanceCents: 999);
+      // Gli obiettivi dei conti sostituiti spariscono con i conti.
+      await db.createSavingsGoal(accountId: cash, name: 'Cuscinetto', targetCents: 5000);
       final p = await plan(replace: true);
       final result = await db.importSossoldi(p);
 
@@ -135,6 +137,7 @@ void main() {
       expect(txs.where((t) => t.category.name == 'Ristoranti e bar'), hasLength(2));
       expect(txs.firstWhere((t) => t.tx.note == 'Soldi da papà').category.type, TxType.income);
       expect(result.createdCategories, 3); // Famiglia (entrata), Famiglia (uscita), Pesca
+      expect(await db.getSavingsGoals(), isEmpty);
     });
 
     test('aggiungendo ai dati esistenti i nomi dei conti non si scontrano', () async {

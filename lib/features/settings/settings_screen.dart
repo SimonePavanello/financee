@@ -6,6 +6,7 @@ import '../../core/utils/formatters.dart';
 import '../../data/sample_data.dart';
 import '../../providers.dart';
 import '../../widgets/common.dart';
+import '../backup/backup_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 import 'import_sossoldi_screen.dart';
 
@@ -32,7 +33,7 @@ class SettingsScreen extends ConsumerWidget {
       context,
       title: 'Eliminare tutti i movimenti?',
       message:
-          'Verranno eliminati definitivamente $count movimenti e tutti i trasferimenti tra conti. Conti, categorie e debiti restano (i debiti senza pagamenti). Se vuoi conservarli, esporta prima un report CSV.',
+          'Verranno eliminati definitivamente $count movimenti e tutti i trasferimenti tra conti. Conti, categorie, debiti e obiettivi restano (i debiti senza pagamenti). Se vuoi conservarli, esporta prima un backup.',
       action: 'Elimina tutto',
       destructive: true,
     );
@@ -149,6 +150,8 @@ class SettingsScreen extends ConsumerWidget {
                 const SizedBox(height: 20),
                 const MealVoucherSettingsCard(),
                 const SizedBox(height: 20),
+                const BackupSettingsCard(),
+                const SizedBox(height: 20),
                 AppCard(
                   padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
                   child: Column(
@@ -191,7 +194,7 @@ class SettingsScreen extends ConsumerWidget {
                           'Elimina tutti i movimenti',
                           style: TextStyle(color: AppColors.expense),
                         ),
-                        subtitle: const Text('Conti, categorie e debiti non vengono toccati'),
+                        subtitle: const Text('Conti, categorie, debiti e obiettivi non vengono toccati'),
                         enabled: (count ?? 0) > 0,
                         onTap: () => _deleteAll(context, ref),
                       ),

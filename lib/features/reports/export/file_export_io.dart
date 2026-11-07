@@ -4,7 +4,13 @@ import 'dart:typed_data';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-Future<String> saveFile(String fileName, Uint8List bytes, String mimeType) async {
+import 'file_export_stub.dart' show ExportResult;
+
+Future<ExportResult> saveFile(
+  String fileName,
+  Uint8List bytes,
+  String mimeType,
+) async {
   final dir = await getTemporaryDirectory();
   final file = File('${dir.path}${Platform.pathSeparator}$fileName');
   await file.writeAsBytes(bytes, flush: true);
@@ -16,8 +22,17 @@ Future<String> saveFile(String fileName, Uint8List bytes, String mimeType) async
     ),
   );
   return switch (result.status) {
-    ShareResultStatus.success => 'File condiviso: $fileName',
-    ShareResultStatus.dismissed => 'Condivisione annullata',
-    ShareResultStatus.unavailable => 'File pronto: $fileName',
+    ShareResultStatus.success => (
+      saved: true,
+      message: 'File condiviso: $fileName',
+    ),
+    ShareResultStatus.dismissed => (
+      saved: false,
+      message: 'Condivisione annullata',
+    ),
+    ShareResultStatus.unavailable => (
+      saved: true,
+      message: 'File pronto: $fileName',
+    ),
   };
 }

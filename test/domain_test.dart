@@ -5,6 +5,7 @@ import 'package:financiee/data/models.dart';
 import 'package:financiee/domain/analytics.dart';
 import 'package:financiee/domain/debts.dart';
 import 'package:financiee/domain/meal_vouchers.dart';
+import 'package:financiee/domain/savings_goals.dart';
 import 'package:financiee/features/reports/csv_report_builder.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -473,6 +474,142 @@ void main() {
       );
       expect(early.first.date, DateTime(2026, 8, 20));
       expect(early.last.remainingCents, 0);
+    });
+  });
+
+  group('Obiettivi di risparmio', () {
+    final today = DateTime(2026, 11, 8);
+    SavingsGoalEntity goal({
+      int target = 500000,
+      DateTime? deadline,
+      DateTime? created,
+      int accountId = 2,
+    }) => SavingsGoalEntity(
+      id: accountId * 10,
+      accountId: accountId,
+      name: 'Fondo emergenza',
+      targetCents: target,
+      deadline: deadline,
+      createdAt: created ?? DateTime(2026, 1, 1),
+    );
+    // Versamenti di 300 € il 15 di ogni mese, da gennaio.
+    final monthly = <BalanceDelta>[
+      for (var m = 1; m <= 10; m++) (DateTime(2026, m, 15), 30000),
+    ];
+    GoalSummary summary({
+      int balance = 320000,
+      DateTime? deadline,
+      List<BalanceDelta>? deltas,
+      int target = 500000,
+    }) {
+      final list = deltas ?? monthly;
+      final initial = balance - list.fold<int>(0, (s, d) => s + d.$2);
+      return GoalSummary.combine(
+        goals: [goal(target: target, deadline: deadline)],
+        accounts: [_acc(2, 'Risparmi', initial)],
+        deltas: {2: list},
+        today: today,
+      ).single;
+    }
+
+    test('quanto manca e percentuale, anche con saldo negativo', () {
+      final g = summary();
+      expect(g.balanceCents, 320000);
+      expect(g.remainingCents, 180000);
+      expect(g.progress, closeTo(0.64, 1e-9));
+      expect(g.isReached, isFalse);
+      final negative = summary(balance: -10000, deltas: const []);
+      expect(negative.progress, 0);
+      expect(negative.remainingCents, 510000);
+      final over = summary(balance: 520000);
+      expect(over.isReached, isTrue);
+      expect(over.progress, 1);
+      expect(over.remainingCents, 0);
+      expect(over.extraCents, 20000);
+      expect(over.status(today), GoalStatus.reached);
+    });
+
+    test('ritmo di risparmio degli ultimi 3 mesi', () {
+      // Nella finestra (dal 9 agosto) cadono i versamenti di agosto,
+      // settembre e ottobre: 900 € in 91 giorni.
+      expect(monthlySaving(monthly, today), (90000 * 30.4375 / 91).round());
+      // Conto con movimenti da meno di 4 settimane: ritmo non stimabile.
+      expect(monthlySaving([(DateTime(2026, 10, 20), 50000)], today), isNull);
+      expect(monthlySaving(const [], today), isNull);
+      // Un conto nato da poco usa solo i giorni da cui ha movimenti.
+      expect(
+        monthlySaving([(DateTime(2026, 9, 9), 20000), (DateTime(2026, 10, 9), 20000)], today),
+        (40000 * 30.4375 / 60).round(),
+      );
+    });
+
+    test('scadenza: mesi rimasti, quanto serve al mese e stato', () {
+      final g = summary(deadline: DateTime(2027, 12, 31));
+      expect(g.monthsLeft(today), 14); // 418 giorni
+      expect(g.monthlyNeededCents(today), (180000 / 14).ceil());
+      expect(g.status(today), GoalStatus.onTrack); // ~301 €/mese > ~129 €
+      final tight = summary(deadline: DateTime(2027, 2, 8));
+      expect(tight.monthsLeft(today), 3);
+      expect(tight.monthlyNeededCents(today), 60000);
+      expect(tight.status(today), GoalStatus.behind);
+      final past = summary(deadline: DateTime(2026, 10, 31));
+      expect(past.monthsLeft(today), 0);
+      expect(past.monthlyNeededCents(today), isNull);
+      expect(past.status(today), GoalStatus.overdue);
+      expect(summary().monthsLeft(today), isNull);
+    });
+
+    test('ritmo fermo o sconosciuto e data prevista', () {
+      final g = summary();
+      final pace = g.monthlySavingCents!;
+      final days = (180000 / pace * 30.4375).ceil();
+      expect(g.projectedDate(today), today.add(Duration(days: days)));
+      expect(g.status(today), GoalStatus.onTrack);
+      final stalled = summary(
+        deltas: [(DateTime(2026, 3, 1), 300000), (DateTime(2026, 10, 1), -5000)],
+      );
+      expect(stalled.monthlySavingCents, lessThan(0));
+      expect(stalled.projectedDate(today), isNull);
+      expect(stalled.status(today), GoalStatus.stalled);
+      final fresh = summary(deltas: [(DateTime(2026, 11, 1), 10000)]);
+      expect(fresh.monthlySavingCents, isNull);
+      expect(fresh.status(today), GoalStatus.unknown);
+    });
+
+    test('andamento del saldo: un punto per giorno con variazioni', () {
+      final points = balanceHistory(
+        initialBalanceCents: 100000,
+        deltas: [
+          (DateTime(2026, 8, 1), 5000),
+          (DateTime(2026, 9, 1), 20000),
+          (DateTime(2026, 9, 1, 18), -2000),
+          (DateTime(2026, 10, 3), 10000),
+        ],
+        start: DateTime(2026, 8, 15),
+        today: today,
+      );
+      expect(points.map((p) => (p.date, p.balanceCents)), [
+        (DateTime(2026, 8, 15), 105000),
+        (DateTime(2026, 9, 1), 123000),
+        (DateTime(2026, 10, 3), 133000),
+        (today, 133000),
+      ]);
+      // La storia parte al massimo un anno fa.
+      final g = summary();
+      expect(g.history(today).first, (date: DateTime(2025, 12, 31), balanceCents: 20000));
+      expect(g.history(today).last, (date: today, balanceCents: 320000));
+      expect(g.history(today, days: 30).first.date, DateTime(2026, 10, 9));
+    });
+
+    test('ordine: prima da raggiungere, poi raggiunti, come i conti', () {
+      final list = GoalSummary.combine(
+        goals: [goal(accountId: 2), goal(accountId: 1, target: 1000), goal(accountId: 3)],
+        accounts: [_acc(1, 'Conto principale', 50000), _acc(2, 'Risparmi'), _acc(3, 'Vacanze')],
+        deltas: const {},
+        today: today,
+      );
+      expect(list.map((g) => g.accountId), [2, 3, 1]);
+      expect(list.last.isReached, isTrue);
     });
   });
 }

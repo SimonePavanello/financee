@@ -72,6 +72,27 @@ class Debts extends Table {
 /// dell'ultimo.
 typedef DebtPayments = ({int paidCents, int count, DateTime? lastDate});
 
+/// Obiettivo di risparmio di un conto (al massimo uno per conto): quanto è
+/// stato messo da parte è il saldo del conto.
+@DataClassName('SavingsGoalEntity')
+class SavingsGoals extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// Conto su cui si risparmia.
+  IntColumn get accountId => integer().unique().references(Accounts, #id)();
+  TextColumn get name => text().withLength(min: 1, max: 40)();
+
+  /// Saldo da raggiungere, sempre positivo, in centesimi.
+  IntColumn get targetCents => integer()();
+
+  /// Giorno entro cui raggiungerlo (facoltativo).
+  DateTimeColumn get deadline => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Variazione del saldo di un conto: giorno e centesimi con segno.
+typedef BalanceDelta = (DateTime date, int cents);
+
 @DataClassName('TransactionEntity')
 @TableIndex(name: 'transactions_date_idx', columns: {#date})
 @TableIndex(name: 'transactions_account_idx', columns: {#accountId})
@@ -148,7 +169,9 @@ class Transfers extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [Accounts, Categories, Debts, Transactions, Transfers])
+@DriftDatabase(
+  tables: [Accounts, Categories, Debts, Transactions, Transfers, SavingsGoals],
+)
 class AppDatabase extends _$AppDatabase {
   /// L'executor arriva da `openAppDatabaseConnection()` (vedi connection.dart)
   /// oppure, nei test, da un database in memoria.
@@ -158,8 +181,9 @@ class AppDatabase extends _$AppDatabase {
   /// v2: conti (ogni movimento appartiene a un conto) e trasferimenti.
   /// v3: buoni pasto (tipo di conto e parte di una spesa pagata con i buoni).
   /// v4: debiti (le spese possono essere collegate a un debito).
+  /// v5: obiettivi di risparmio sui conti.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -204,6 +228,7 @@ class AppDatabase extends _$AppDatabase {
           if (from == 2 || from == 3) {
             await m.addColumn(transactions, transactions.debtId);
           }
+          if (from < 5) await m.createTable(savingsGoals);
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = ON');
@@ -387,6 +412,22 @@ class AppDatabase extends _$AppDatabase {
   /// diventano interni e vengono eliminati.
   Future<void> deleteAccount(int accountId, {int? mergeInto}) =>
       transaction(() async {
+        // L'obiettivo del conto passa al conto di destinazione, se quello
+        // non ne ha già uno; altrimenti viene eliminato.
+        final targetGoal = mergeInto == null
+            ? null
+            : await (select(savingsGoals)
+                  ..where((g) => g.accountId.equals(mergeInto)))
+                .getSingleOrNull();
+        if (mergeInto != null && targetGoal == null) {
+          await (update(savingsGoals)
+                ..where((g) => g.accountId.equals(accountId)))
+              .write(SavingsGoalsCompanion(accountId: Value(mergeInto)));
+        } else {
+          await (delete(savingsGoals)
+                ..where((g) => g.accountId.equals(accountId)))
+              .go();
+        }
         if (mergeInto != null) {
           final source = await (select(accounts)
                 ..where((a) => a.id.equals(accountId)))
@@ -576,6 +617,79 @@ class AppDatabase extends _$AppDatabase {
           },
         );
   }
+
+  // ---------------------------------------------------------------------------
+  // Obiettivi di risparmio
+  // ---------------------------------------------------------------------------
+
+  Stream<List<SavingsGoalEntity>> watchSavingsGoals() =>
+      (select(savingsGoals)..orderBy([(g) => OrderingTerm.asc(g.id)])).watch();
+
+  Future<List<SavingsGoalEntity>> getSavingsGoals() =>
+      (select(savingsGoals)..orderBy([(g) => OrderingTerm.asc(g.id)])).get();
+
+  /// Crea l'obiettivo di [accountId] (un conto ne ha al massimo uno).
+  Future<int> createSavingsGoal({
+    required int accountId,
+    required String name,
+    required int targetCents,
+    DateTime? deadline,
+  }) =>
+      into(savingsGoals).insert(
+        SavingsGoalsCompanion.insert(
+          accountId: accountId,
+          name: name,
+          targetCents: targetCents,
+          deadline: Value(deadline == null ? null : _day(deadline)),
+        ),
+      );
+
+  Future<bool> updateSavingsGoal(SavingsGoalEntity goal) =>
+      update(savingsGoals).replace(
+        goal.copyWith(
+          deadline: Value(goal.deadline == null ? null : _day(goal.deadline!)),
+        ),
+      );
+
+  Future<int> deleteSavingsGoal(int id) =>
+      (delete(savingsGoals)..where((g) => g.id.equals(id))).go();
+
+  /// Variazioni del saldo dei conti che hanno un obiettivo (id conto ->
+  /// variazioni, dalla più vecchia), con le stesse regole di
+  /// [watchAccountBalances].
+  Stream<Map<int, List<BalanceDelta>>> watchGoalAccountDeltas() => customSelect(
+        '''
+        SELECT g.account_id AS account_id, x.date AS date,
+          CASE WHEN x.type = ${TxType.income.index}
+               THEN x.amount_cents - x.voucher_cents
+               ELSE x.voucher_cents - x.amount_cents END AS delta
+        FROM savings_goals g JOIN transactions x ON x.account_id = g.account_id
+        UNION ALL
+        SELECT g.account_id, x.date,
+          CASE WHEN x.type = ${TxType.income.index}
+               THEN x.voucher_cents ELSE -x.voucher_cents END
+        FROM savings_goals g
+        JOIN transactions x ON x.voucher_account_id = g.account_id
+        UNION ALL
+        SELECT g.account_id, x.date, x.amount_cents
+        FROM savings_goals g JOIN transfers x ON x.to_account_id = g.account_id
+        UNION ALL
+        SELECT g.account_id, x.date, -x.amount_cents
+        FROM savings_goals g JOIN transfers x ON x.from_account_id = g.account_id
+        ORDER BY date
+        ''',
+        readsFrom: {savingsGoals, transactions, transfers},
+      ).watch().map((rows) {
+        final result = <int, List<BalanceDelta>>{};
+        for (final r in rows) {
+          final delta = r.read<int>('delta');
+          if (delta == 0) continue;
+          (result[r.read<int>('account_id')] ??= []).add(
+            (r.read<DateTime>('date'), delta),
+          );
+        }
+        return result;
+      });
 
   // ---------------------------------------------------------------------------
   // Movimenti (entrate e uscite)
