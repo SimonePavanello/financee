@@ -22,12 +22,15 @@ class CsvReportBuilder {
 
   final _amount = NumberFormat('0.00', 'it_IT');
 
-  /// Report completo: intestazione, riepilogo, categorie, andamento mensile
-  /// e dettaglio dei movimenti con saldo progressivo.
+  /// Report completo: intestazione, riepilogo, conti, categorie, andamento
+  /// mensile, trasferimenti e dettaglio dei movimenti con saldo progressivo.
   String buildFullReport(ReportData data) {
     final s = data.summary;
     final rows = <List<Object?>>[];
     final ascending = data.transactions.reversed.toList();
+    final transfersAsc = data.transfers.reversed.toList();
+    final transfersTotal =
+        data.transfers.fold<int>(0, (sum, t) => sum + t.amountCents);
 
     // Intestazione
     rows
@@ -75,7 +78,7 @@ class CsvReportBuilder {
       rows.add([
         'Spesa più alta (€)',
         _money(biggest.tx.amountCents),
-        '${biggest.title} (${biggest.category.name}) del ${formatDate(biggest.tx.date)}',
+        '${biggest.title} (${biggest.category.name}, ${biggest.account.name}) del ${formatDate(biggest.tx.date)}',
       ]);
     }
     final top = s.expenseByCategory.firstOrNull;
@@ -86,7 +89,54 @@ class CsvReportBuilder {
         '${formatPercent(top.share)} delle uscite (${formatMoney(top.totalCents)})',
       ]);
     }
+    if (data.transfers.isNotEmpty) {
+      rows.add([
+        'Trasferimenti tra conti (€)',
+        _money(transfersTotal),
+        '${plural(data.transfers.length, 'trasferimento', 'trasferimenti')}: '
+            'spostano denaro tra i tuoi conti, non sono né entrate né uscite',
+      ]);
+    }
     rows.add([]);
+
+    // Conti
+    if (data.accounts.isNotEmpty) {
+      rows
+        ..add(['CONTI'])
+        ..add([
+          'Conto',
+          'Saldo a inizio periodo (€)',
+          'Entrate (€)',
+          'Uscite (€)',
+          'Trasferimenti netti (€)',
+          'Saldo a fine periodo (€)',
+          'Variazione (€)',
+        ]);
+      for (final a in data.accounts) {
+        rows.add([
+          _text(a.account.name),
+          _money(a.startCents),
+          _money(a.incomeCents),
+          _money(a.expenseCents),
+          _money(a.transferNetCents),
+          _money(a.endCents),
+          _money(a.changeCents),
+        ]);
+      }
+      int sum(int Function(AccountPeriodSummary a) f) =>
+          data.accounts.fold(0, (s, a) => s + f(a));
+      rows
+        ..add([
+          'TOTALE (patrimonio)',
+          _money(sum((a) => a.startCents)),
+          _money(sum((a) => a.incomeCents)),
+          _money(sum((a) => a.expenseCents)),
+          _money(sum((a) => a.transferNetCents)),
+          _money(sum((a) => a.endCents)),
+          _money(sum((a) => a.changeCents)),
+        ])
+        ..add([]);
+    }
 
     // Categorie
     _addCategorySection(rows, 'USCITE PER CATEGORIA', s.expenseByCategory,
@@ -119,6 +169,26 @@ class CsvReportBuilder {
       rows.add([]);
     }
 
+    // Trasferimenti
+    if (transfersAsc.isNotEmpty) {
+      rows
+        ..add(['TRASFERIMENTI TRA CONTI'])
+        ..add(['Data', 'Giorno', 'Da', 'A', 'Descrizione', 'Importo (€)']);
+      for (final t in transfersAsc) {
+        rows.add([
+          formatDate(t.date),
+          formatWeekday(t.date),
+          _text(t.from.name),
+          _text(t.to.name),
+          _text(t.transfer.note),
+          _money(t.amountCents),
+        ]);
+      }
+      rows
+        ..add(['TOTALE', '', '', '', '', _money(transfersTotal)])
+        ..add([]);
+    }
+
     // Dettaglio movimenti
     rows
       ..add(['DETTAGLIO MOVIMENTI'])
@@ -127,6 +197,7 @@ class CsvReportBuilder {
         'Giorno',
         'Tipo',
         'Categoria',
+        'Conto',
         'Descrizione',
         'Entrata (€)',
         'Uscita (€)',
@@ -143,6 +214,7 @@ class CsvReportBuilder {
         formatWeekday(t.tx.date),
         t.isIncome ? 'Entrata' : 'Uscita',
         _text(t.category.name),
+        _text(t.account.name),
         _text(t.tx.note),
         t.isIncome ? _money(t.tx.amountCents) : '',
         t.isIncome ? '' : _money(t.tx.amountCents),
@@ -152,6 +224,7 @@ class CsvReportBuilder {
     if (ascending.isNotEmpty) {
       rows.add([
         'TOTALE',
+        '',
         '',
         '',
         '',
@@ -166,19 +239,48 @@ class CsvReportBuilder {
   }
 
   /// Tabella semplice, una riga per movimento: ideale per filtri e tabelle
-  /// pivot. L'importo ha il segno (negativo = uscita).
-  String buildTransactionsTable(List<TransactionWithCategory> items) {
+  /// pivot. L'importo ha il segno (negativo = uscita). Ogni trasferimento
+  /// diventa due righe (uscita dal conto di origine, entrata in quello di
+  /// destinazione), così i totali per conto tornano.
+  String buildTransactionsTable(ReportData data) {
     final rows = <List<Object?>>[
-      ['Data', 'Tipo', 'Categoria', 'Descrizione', 'Importo (€)'],
-      for (final t in items.reversed)
-        [
-          formatDate(t.tx.date),
-          t.isIncome ? 'Entrata' : 'Uscita',
-          _text(t.category.name),
-          _text(t.tx.note),
-          _money(t.signedCents),
-        ],
+      ['Data', 'Tipo', 'Categoria', 'Conto', 'Descrizione', 'Importo (€)'],
     ];
+    final movements = mergeMovements(data.transactions, data.transfers).reversed;
+    for (final m in movements) {
+      switch (m) {
+        case TransactionWithCategory t:
+          rows.add([
+            formatDate(t.tx.date),
+            t.isIncome ? 'Entrata' : 'Uscita',
+            _text(t.category.name),
+            _text(t.account.name),
+            _text(t.tx.note),
+            _money(t.signedCents),
+          ]);
+        case TransferWithAccounts t:
+          final note = t.transfer.note.trim().isEmpty
+              ? '${t.from.name} → ${t.to.name}'
+              : t.transfer.note;
+          rows
+            ..add([
+              formatDate(t.date),
+              'Trasferimento in uscita',
+              'Trasferimento',
+              _text(t.from.name),
+              _text(note),
+              _money(-t.amountCents),
+            ])
+            ..add([
+              formatDate(t.date),
+              'Trasferimento in entrata',
+              'Trasferimento',
+              _text(t.to.name),
+              _text(note),
+              _money(t.amountCents),
+            ]);
+      }
+    }
     return _encode(rows);
   }
 

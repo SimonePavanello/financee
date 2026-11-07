@@ -28,6 +28,7 @@ dependencies:
   share_plus: ^13.3.1
   path_provider: ^2.1.6
   web: ^1.1.2
+  file_selector: ^1.1.0
 
 dev_dependencies:
   flutter_test:
@@ -38,6 +39,9 @@ dev_dependencies:
   # test_api fissato da flutter_test.
   build_runner: ">=2.10.0 <2.16.2"
   test: ^1.31.1
+  # Usato nei test di migrazione. Versione fissata: deve coincidere con
+  # web/sqlite3.wasm (stessa release di sqlite3.dart).
+  sqlite3: 3.5.2
 
 flutter:
   uses-material-design: true

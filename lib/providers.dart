@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'core/utils/period.dart';
+import 'core/utils/streams.dart';
 import 'data/app_database.dart';
 import 'data/connection.dart';
 import 'data/models.dart';
@@ -45,6 +46,35 @@ final themeModeProvider =
     NotifierProvider<ThemeModeNotifier, ThemeMode>(ThemeModeNotifier.new);
 
 // -----------------------------------------------------------------------------
+// Conti
+// -----------------------------------------------------------------------------
+
+final accountsProvider = StreamProvider<List<AccountEntity>>(
+  (ref) => ref.watch(databaseProvider).watchAccounts(),
+);
+
+/// Saldo attuale di ogni conto (id -> centesimi).
+final accountBalancesProvider = StreamProvider<Map<int, int>>(
+  (ref) => ref.watch(databaseProvider).watchAccountBalances(),
+);
+
+/// Numero di movimenti e trasferimenti per conto.
+final accountUsageProvider = StreamProvider<Map<int, int>>(
+  (ref) => ref.watch(databaseProvider).watchAccountUsage(),
+);
+
+/// Conto su cui è filtrata la lista movimenti (`null` = tutti).
+class AccountFilterNotifier extends Notifier<int?> {
+  @override
+  int? build() => null;
+
+  void set(int? accountId) => state = accountId;
+}
+
+final accountFilterProvider =
+    NotifierProvider<AccountFilterNotifier, int?>(AccountFilterNotifier.new);
+
+// -----------------------------------------------------------------------------
 // Categorie
 // -----------------------------------------------------------------------------
 
@@ -79,22 +109,28 @@ final transactionCountProvider = StreamProvider<int>(
   (ref) => ref.watch(databaseProvider).watchTransactionCount(),
 );
 
-final monthTransactionsProvider =
-    StreamProvider.autoDispose<List<TransactionWithCategory>>((ref) {
+/// Movimenti e trasferimenti del mese selezionato.
+final monthMovementsProvider =
+    StreamProvider.autoDispose<List<Movement>>((ref) {
   final period = Period.month(ref.watch(selectedMonthProvider));
   return ref
       .watch(databaseProvider)
-      .watchTransactionsBetween(period.start, period.end);
+      .watchMovementsBetween(period.start, period.end);
 });
 
 final dashboardProvider = StreamProvider.autoDispose<DashboardData>((ref) {
   final month = ref.watch(selectedMonthProvider);
-  final from = DateTime(month.year, month.month - 5);
-  final to = DateTime(month.year, month.month + 1);
-  return ref
-      .watch(databaseProvider)
-      .watchTransactionsBetween(from, to)
-      .map((all) => DashboardData.compute(month, all));
+  final db = ref.watch(databaseProvider);
+  final current = Period.month(month);
+  return combineLatest2(
+    db.watchTransactionsBetween(
+      DateTime(month.year, month.month - 5),
+      current.end,
+    ),
+    db.watchTransfersBetween(current.start, current.end),
+    (all, transfers) =>
+        DashboardData.compute(month, all, transfers: transfers),
+  );
 });
 
 // -----------------------------------------------------------------------------
@@ -129,8 +165,19 @@ final reportPeriodProvider =
 
 final reportDataProvider = StreamProvider.autoDispose<ReportData>((ref) {
   final period = ref.watch(reportPeriodProvider);
-  return ref
-      .watch(databaseProvider)
-      .watchTransactionsBetween(period.start, period.end)
-      .map((items) => ReportData.compute(period, items));
+  final db = ref.watch(databaseProvider);
+  return combineLatestAll([
+    db.watchTransactionsBetween(period.start, period.end),
+    db.watchTransfersBetween(period.start, period.end),
+    db.watchAccounts(),
+    db.watchAccountBalances(before: period.start),
+  ]).map(
+    (v) => ReportData.compute(
+      period,
+      v[0] as List<TransactionWithCategory>,
+      transfers: v[1] as List<TransferWithAccounts>,
+      accounts: v[2] as List<AccountEntity>,
+      startBalances: v[3] as Map<int, int>,
+    ),
+  );
 });

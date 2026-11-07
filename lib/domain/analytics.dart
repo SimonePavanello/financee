@@ -162,10 +162,12 @@ class DashboardData {
     required this.averageDays,
   });
 
-  /// [all] deve coprire i 6 mesi che terminano con [month].
+  /// [all] deve coprire i 6 mesi che terminano con [month]; [transfers] sono
+  /// i trasferimenti del mese (mostrati tra gli ultimi movimenti).
   factory DashboardData.compute(
     DateTime month,
     List<TransactionWithCategory> all, {
+    List<TransferWithAccounts> transfers = const [],
     DateTime? now,
   }) {
     final period = Period.month(month);
@@ -181,7 +183,10 @@ class DashboardData {
         DateTime(month.year, month.month - 5),
         period.end,
       ),
-      recent: currentItems.take(5).toList(growable: false),
+      recent: mergeMovements(
+        currentItems,
+        transfers.where((t) => period.contains(t.date)).toList(),
+      ).take(5).toList(growable: false),
       averageDays: period.daysForAverage(now ?? DateTime.now()),
     );
   }
@@ -190,7 +195,7 @@ class DashboardData {
   final PeriodSummary current;
   final PeriodSummary previous;
   final List<MonthBucket> trend;
-  final List<TransactionWithCategory> recent;
+  final List<Movement> recent;
   final int averageDays;
 
   int get dailyAverageExpense =>
@@ -202,6 +207,31 @@ class DashboardData {
       : (current.expenseCents - previous.expenseCents) / previous.expenseCents;
 }
 
+/// Andamento di un conto in un periodo.
+class AccountPeriodSummary {
+  const AccountPeriodSummary({
+    required this.account,
+    required this.startCents,
+    required this.incomeCents,
+    required this.expenseCents,
+    required this.transferInCents,
+    required this.transferOutCents,
+  });
+
+  final AccountEntity account;
+
+  /// Saldo all'inizio del periodo.
+  final int startCents;
+  final int incomeCents;
+  final int expenseCents;
+  final int transferInCents;
+  final int transferOutCents;
+
+  int get transferNetCents => transferInCents - transferOutCents;
+  int get changeCents => incomeCents - expenseCents + transferNetCents;
+  int get endCents => startCents + changeCents;
+}
+
 /// Dati della schermata Report per il periodo scelto.
 class ReportData {
   const ReportData({
@@ -209,21 +239,49 @@ class ReportData {
     required this.summary,
     required this.months,
     required this.transactions,
+    required this.transfers,
+    required this.accounts,
     required this.averageDays,
   });
 
+  /// [startBalances]: saldo di ogni conto all'inizio del periodo.
   factory ReportData.compute(
     Period period,
     List<TransactionWithCategory> items, {
+    List<TransferWithAccounts> transfers = const [],
+    List<AccountEntity> accounts = const [],
+    Map<int, int> startBalances = const {},
     DateTime? now,
-  }) =>
-      ReportData(
-        period: period,
-        summary: PeriodSummary.from(items),
-        months: bucketByMonth(items, period.start, period.end),
-        transactions: items,
-        averageDays: period.daysForAverage(now ?? DateTime.now()),
-      );
+  }) {
+    final accountSummaries = [
+      for (final a in accounts)
+        AccountPeriodSummary(
+          account: a,
+          startCents: startBalances[a.id] ?? a.initialBalanceCents,
+          incomeCents: items
+              .where((i) => i.isIncome && i.tx.accountId == a.id)
+              .fold(0, (s, i) => s + i.tx.amountCents),
+          expenseCents: items
+              .where((i) => !i.isIncome && i.tx.accountId == a.id)
+              .fold(0, (s, i) => s + i.tx.amountCents),
+          transferInCents: transfers
+              .where((t) => t.to.id == a.id)
+              .fold(0, (s, t) => s + t.amountCents),
+          transferOutCents: transfers
+              .where((t) => t.from.id == a.id)
+              .fold(0, (s, t) => s + t.amountCents),
+        ),
+    ];
+    return ReportData(
+      period: period,
+      summary: PeriodSummary.from(items),
+      months: bucketByMonth(items, period.start, period.end),
+      transactions: items,
+      transfers: transfers,
+      accounts: accountSummaries,
+      averageDays: period.daysForAverage(now ?? DateTime.now()),
+    );
+  }
 
   final Period period;
   final PeriodSummary summary;
@@ -231,7 +289,13 @@ class ReportData {
 
   /// Ordinati dal più recente.
   final List<TransactionWithCategory> transactions;
+
+  /// Ordinati dal più recente.
+  final List<TransferWithAccounts> transfers;
+  final List<AccountPeriodSummary> accounts;
   final int averageDays;
+
+  bool get isEmpty => transactions.isEmpty && transfers.isEmpty;
 
   int get dailyAverageExpense =>
       averageDays == 0 ? 0 : (summary.expenseCents / averageDays).round();

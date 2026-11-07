@@ -55,8 +55,31 @@ const Map<String, IconData> kCategoryIcons = {
   'other': Icons.category_rounded,
 };
 
+/// Icone selezionabili per i conti.
+const Map<String, IconData> kAccountIcons = {
+  'bank': Icons.account_balance_rounded,
+  'wallet': Icons.account_balance_wallet_rounded,
+  'card': Icons.credit_card_rounded,
+  'cash': Icons.payments_rounded,
+  'savings': Icons.savings_rounded,
+  'trending': Icons.show_chart_rounded,
+  'phone': Icons.phone_iphone_rounded,
+  'safe': Icons.lock_rounded,
+  'home': Icons.home_rounded,
+  'work': Icons.work_rounded,
+  'family': Icons.family_restroom_rounded,
+  'flight': Icons.flight_rounded,
+  'gift': Icons.card_giftcard_rounded,
+  'bitcoin': Icons.currency_bitcoin_rounded,
+  'euro': Icons.euro_rounded,
+  'store': Icons.storefront_rounded,
+};
+
 IconData categoryIcon(String key) =>
-    kCategoryIcons[key] ?? Icons.category_rounded;
+    kCategoryIcons[key] ?? kAccountIcons[key] ?? Icons.category_rounded;
+
+IconData accountIcon(String key) =>
+    kAccountIcons[key] ?? kCategoryIcons[key] ?? Icons.account_balance_rounded;
 
 /// Palette per le categorie.
 const List<Color> kCategoryColors = [

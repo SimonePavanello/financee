@@ -1,17 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../providers.dart';
+import '../accounts/accounts_screen.dart';
 import '../categories/categories_screen.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../reports/reports_screen.dart';
 import '../transactions/transaction_form_screen.dart';
 import '../transactions/transactions_screen.dart';
 
-class HomeShell extends StatefulWidget {
+class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
 
   @override
-  State<HomeShell> createState() => _HomeShellState();
+  ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
 class _Destination {
@@ -25,25 +28,46 @@ class _Destination {
 const _destinations = [
   _Destination('Home', Icons.space_dashboard_outlined, Icons.space_dashboard_rounded),
   _Destination('Movimenti', Icons.receipt_long_outlined, Icons.receipt_long_rounded),
+  _Destination('Conti', Icons.account_balance_wallet_outlined,
+      Icons.account_balance_wallet_rounded),
   _Destination('Report', Icons.insights_outlined, Icons.insights_rounded),
   _Destination('Categorie', Icons.category_outlined, Icons.category_rounded),
 ];
 
-class _HomeShellState extends State<HomeShell> {
+const _movementsTab = 1;
+const _accountsTab = 2;
+const _categoriesTab = 4;
+
+class _HomeShellState extends ConsumerState<HomeShell> {
   int _index = 0;
 
   late final List<Widget> _pages = [
-    DashboardScreen(onSeeAll: () => _select(1)),
+    DashboardScreen(
+      onSeeAll: () => _select(_movementsTab),
+      onManageAccounts: () => _select(_accountsTab),
+      onShowAccount: _showAccount,
+    ),
     const TransactionsScreen(),
+    AccountsScreen(onShowMovements: _showAccount),
     const ReportsScreen(),
     const CategoriesScreen(),
   ];
 
   void _select(int i) => setState(() => _index = i);
 
+  /// Apre i movimenti filtrati sul conto indicato.
+  void _showAccount(int accountId) {
+    ref.read(accountFilterProvider.notifier).set(accountId);
+    _select(_movementsTab);
+  }
+
   Future<void> _addTransaction() async {
     final messenger = ScaffoldMessenger.of(context);
-    final saved = await openTransactionForm(context);
+    // Dalla lista filtrata su un conto, il nuovo movimento parte da quel conto.
+    final saved = await openTransactionForm(
+      context,
+      accountId: _index == _movementsTab ? ref.read(accountFilterProvider) : null,
+    );
     if (saved == true) {
       messenger
         ..hideCurrentSnackBar()
@@ -109,7 +133,7 @@ class _HomeShellState extends State<HomeShell> {
 
     return Scaffold(
       body: body,
-      floatingActionButton: _index == 3
+      floatingActionButton: _index == _accountsTab || _index == _categoriesTab
           ? null
           : FloatingActionButton(
               heroTag: 'add-bottom',

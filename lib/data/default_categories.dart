@@ -9,6 +9,17 @@ class DefaultCategory {
   final int color;
 }
 
+class DefaultAccount {
+  const DefaultAccount(this.name, this.iconKey, this.color);
+
+  final String name;
+  final String iconKey;
+  final int color;
+}
+
+/// Conto creato al primo avvio (e in migrazione, per i movimenti esistenti).
+const kDefaultAccount = DefaultAccount('Conto principale', 'bank', 0xFF6366F1);
+
 /// Categorie create al primo avvio. L'utente può modificarle o eliminarle.
 const kDefaultCategories = <DefaultCategory>[
   // Uscite

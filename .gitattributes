@@ -12,3 +12,6 @@
 # File generati: niente diff rumorosi
 *.g.dart linguist-generated
 web/drift_worker.js -diff linguist-generated
+
+# Script batch di Windows: sempre CRLF
+*.bat text eol=crlf

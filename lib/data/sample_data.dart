@@ -6,17 +6,41 @@ import '../core/utils/formatters.dart';
 import 'app_database.dart';
 
 /// Genera sei mesi di movimenti realistici per esplorare l'app.
-/// Usa le categorie predefinite (se rinominate, quei movimenti vengono saltati).
+/// Usa le categorie predefinite (se rinominate, quei movimenti vengono
+/// saltati) e crea, se mancano, i conti "Contanti" e "Risparmi".
+/// Restituisce il numero di righe inserite (movimenti + trasferimenti).
 Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
   final categories = await db.getCategories();
   final byName = {for (final c in categories) c.name: c};
   final today = now ?? DateTime.now();
   final rnd = Random(42);
+
+  // Conti
+  var accounts = await db.getAccounts();
+  Future<int> ensureAccount(String name, String icon, int color, int initial) async {
+    final existing = accounts.where((a) => a.name == name).firstOrNull;
+    if (existing != null) return existing.id;
+    return db.createAccount(
+      name: name,
+      iconKey: icon,
+      color: color,
+      initialBalanceCents: initial,
+    );
+  }
+
+  final main = accounts.firstOrNull?.id ??
+      await ensureAccount('Conto principale', 'bank', 0xFF6366F1, 0);
+  final cash = await ensureAccount('Contanti', 'cash', 0xFF22C55E, 8000);
+  final savings = await ensureAccount('Risparmi', 'savings', 0xFFF59E0B, 250000);
+  accounts = await db.getAccounts();
+
   final rows = <TransactionsCompanion>[];
+  final transfers = <TransfersCompanion>[];
 
   T pick<T>(List<T> items) => items[rnd.nextInt(items.length)];
 
-  void add(String category, double amount, DateTime date, String note) {
+  void add(String category, double amount, DateTime date, String note,
+      {int? account}) {
     final c = byName[category];
     if (c == null || date.isAfter(today)) return;
     rows.add(
@@ -24,6 +48,20 @@ Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
         type: c.type,
         amountCents: (amount * 100).round(),
         categoryId: c.id,
+        accountId: account ?? main,
+        date: DateTime(date.year, date.month, date.day),
+        note: Value(note),
+      ),
+    );
+  }
+
+  void move(int from, int to, double amount, DateTime date, String note) {
+    if (date.isAfter(today)) return;
+    transfers.add(
+      TransfersCompanion.insert(
+        fromAccountId: from,
+        toAccountId: to,
+        amountCents: (amount * 100).round(),
         date: DateTime(date.year, date.month, date.day),
         note: Value(note),
       ),
@@ -42,7 +80,14 @@ Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
           pick(['Progetto sito web', 'Consulenza', 'Logo per cliente']));
     }
     if (m == 4) add('Rimborsi', 85, day(9), 'Rimborso 730');
-    if (m == 1) add('Investimenti', 64.3, day(15), 'Cedola BTP');
+    if (m == 1) {
+      add('Investimenti', 64.3, day(15), 'Cedola BTP', account: savings);
+    }
+
+    // Trasferimenti
+    move(main, savings, 200, day(2), 'Accantonamento mensile');
+    move(main, cash, 100, day(4), 'Prelievo bancomat');
+    if (m.isOdd) move(main, cash, 50, day(18), 'Prelievo bancomat');
 
     // Casa e bollette
     add('Casa', 650, day(3), 'Affitto');
@@ -62,11 +107,12 @@ Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
           pick(['Esselunga', 'Coop', 'Conad', 'Lidl', 'Carrefour']));
     }
 
-    // Ristoranti
+    // Ristoranti: spesso in contanti
     final dinners = 3 + rnd.nextInt(3);
     for (var i = 0; i < dinners; i++) {
       add('Ristoranti e bar', 8 + rnd.nextInt(45) + 0.5, day(1 + rnd.nextInt(28)),
-          pick(['Pizzeria da Gino', 'Aperitivo', 'Sushi', 'Colazione al bar', 'Trattoria']));
+          pick(['Pizzeria da Gino', 'Aperitivo', 'Sushi', 'Colazione al bar', 'Trattoria']),
+          account: rnd.nextBool() ? cash : main);
     }
 
     // Trasporti
@@ -75,7 +121,8 @@ Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
 
     // Svago, shopping, salute
     if (rnd.nextBool()) {
-      add('Svago', 9.5 * (1 + rnd.nextInt(2)), day(14 + rnd.nextInt(10)), 'Cinema');
+      add('Svago', 9.5 * (1 + rnd.nextInt(2)), day(14 + rnd.nextInt(10)), 'Cinema',
+          account: cash);
     }
     if (m == 3) add('Svago', 68, day(21), 'Concerto');
     if (rnd.nextInt(3) > 0) {
@@ -83,13 +130,15 @@ Future<int> insertSampleData(AppDatabase db, {DateTime? now}) async {
           pick(['Zalando', 'Amazon', 'Decathlon', 'IKEA']));
     }
     if (rnd.nextBool()) {
-      add('Salute', 12 + rnd.nextInt(30).toDouble(), day(1 + rnd.nextInt(27)), 'Farmacia');
+      add('Salute', 12 + rnd.nextInt(30).toDouble(), day(1 + rnd.nextInt(27)), 'Farmacia',
+          account: cash);
     }
     if (m == 2) add('Viaggi', 320, day(12), 'Weekend a Roma');
-    if (m == 4) add('Regali', 45, day(18), 'Regalo compleanno Marta');
+    if (m == 4) add('Regali', 45, day(18), 'Regalo compleanno Marta', account: cash);
     if (m == 5) add('Istruzione', 120, day(10), 'Corso di inglese');
   }
 
   await db.insertTransactions(rows);
-  return rows.length;
+  await db.insertTransfers(transfers);
+  return rows.length + transfers.length;
 }

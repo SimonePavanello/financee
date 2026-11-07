@@ -607,18 +607,20 @@ class _AverageChip extends StatelessWidget {
   }
 }
 
-/// Card "Ultimi movimenti".
+/// Card "Ultimi movimenti" (entrate, uscite e trasferimenti).
 class RecentTransactionsCard extends StatelessWidget {
   const RecentTransactionsCard({
     super.key,
     required this.items,
     required this.onSeeAll,
     required this.onTapItem,
+    this.showAccount = false,
   });
 
-  final List<TransactionWithCategory> items;
+  final List<Movement> items;
   final VoidCallback onSeeAll;
-  final ValueChanged<TransactionWithCategory> onTapItem;
+  final ValueChanged<Movement> onTapItem;
+  final bool showAccount;
 
   @override
   Widget build(BuildContext context) {
@@ -651,7 +653,97 @@ class RecentTransactionsCard extends StatelessWidget {
             )
           else
             for (final item in items)
-              TransactionTile(item: item, onTap: () => onTapItem(item)),
+              MovementTile(
+                movement: item,
+                showAccount: showAccount,
+                onTap: () => onTapItem(item),
+              ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Card "I tuoi conti": patrimonio totale e saldo di ogni conto.
+class AccountsOverviewCard extends StatelessWidget {
+  const AccountsOverviewCard({
+    super.key,
+    required this.accounts,
+    required this.balances,
+    required this.onManage,
+    required this.onTapAccount,
+  });
+
+  final List<AccountEntity> accounts;
+  final Map<int, int> balances;
+  final VoidCallback onManage;
+  final ValueChanged<int> onTapAccount;
+
+  static const _maxShown = 4;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    int balanceOf(AccountEntity a) => balances[a.id] ?? a.initialBalanceCents;
+    final total = accounts.fold<int>(0, (s, a) => s + balanceOf(a));
+    final hidden = accounts.length - _maxShown;
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: SectionHeader(
+              title: 'I tuoi conti',
+              subtitle: 'Patrimonio ${formatMoney(total)}',
+              trailing: TextButton(
+                onPressed: onManage,
+                child: const Text('Gestisci'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final a in accounts.take(_maxShown))
+            InkWell(
+              onTap: () => onTapAccount(a.id),
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                child: Row(
+                  children: [
+                    CategoryAvatar.account(a, size: 38),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        a.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    Text(
+                      formatMoney(balanceOf(a)),
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: balanceOf(a) < 0 ? AppColors.expense : null,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          if (hidden > 0)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(6, 4, 6, 4),
+              child: Text(
+                'e ${plural(hidden, 'altro conto', 'altri conti')}',
+                style: theme.textTheme.labelMedium?.copyWith(color: muted),
+              ),
+            ),
         ],
       ),
     );

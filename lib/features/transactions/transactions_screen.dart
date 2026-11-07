@@ -5,11 +5,13 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
-import '../../domain/analytics.dart';
 import '../../providers.dart';
+import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/transaction_tile.dart';
 import 'transaction_form_screen.dart';
+
+enum _TypeFilter { all, expense, income, transfer }
 
 class TransactionsScreen extends ConsumerStatefulWidget {
   const TransactionsScreen({super.key});
@@ -21,11 +23,11 @@ class TransactionsScreen extends ConsumerStatefulWidget {
 class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   final _search = TextEditingController();
   String _query = '';
-  TxType? _filter;
+  _TypeFilter _filter = _TypeFilter.all;
 
-  /// Movimenti appena eliminati con lo swipe, nascosti finché il DB non
-  /// emette la lista aggiornata (o finché l'utente non annulla).
-  final _hidden = <int>{};
+  /// Voci appena eliminate con lo swipe, nascoste finché il DB non emette la
+  /// lista aggiornata (o finché l'utente non annulla).
+  final _hidden = <Movement>{};
 
   @override
   void dispose() {
@@ -33,32 +35,68 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
     super.dispose();
   }
 
-  List<TransactionWithCategory> _apply(List<TransactionWithCategory> items) {
+  bool _matches(Movement m, int? accountId) {
+    if (_hidden.any((h) => _sameMovement(h, m))) return false;
     final q = _query.trim().toLowerCase();
-    return items.where((i) {
-      if (_hidden.contains(i.tx.id)) return false;
-      if (_filter != null && i.tx.type != _filter) return false;
-      if (q.isEmpty) return true;
-      return i.tx.note.toLowerCase().contains(q) ||
-          i.category.name.toLowerCase().contains(q);
-    }).toList();
+    switch (m) {
+      case TransactionWithCategory t:
+        if (_filter == _TypeFilter.transfer) return false;
+        if (_filter == _TypeFilter.expense && t.isIncome) return false;
+        if (_filter == _TypeFilter.income && !t.isIncome) return false;
+        if (accountId != null && t.tx.accountId != accountId) return false;
+        return q.isEmpty ||
+            t.tx.note.toLowerCase().contains(q) ||
+            t.category.name.toLowerCase().contains(q) ||
+            t.account.name.toLowerCase().contains(q);
+      case TransferWithAccounts t:
+        if (_filter == _TypeFilter.expense || _filter == _TypeFilter.income) {
+          return false;
+        }
+        if (accountId != null && !t.involves(accountId)) return false;
+        return q.isEmpty ||
+            'trasferimento'.contains(q) ||
+            t.transfer.note.toLowerCase().contains(q) ||
+            t.from.name.toLowerCase().contains(q) ||
+            t.to.name.toLowerCase().contains(q);
+    }
   }
 
-  Future<void> _deleteWithUndo(TransactionWithCategory item) async {
+  static bool _sameMovement(Movement a, Movement b) => switch ((a, b)) {
+        (TransactionWithCategory x, TransactionWithCategory y) =>
+          x.tx.id == y.tx.id,
+        (TransferWithAccounts x, TransferWithAccounts y) =>
+          x.transfer.id == y.transfer.id,
+        _ => false,
+      };
+
+  Future<void> _deleteWithUndo(Movement m) async {
     final db = ref.read(databaseProvider);
     final messenger = ScaffoldMessenger.of(context);
-    setState(() => _hidden.add(item.tx.id));
-    await db.deleteTransaction(item.tx.id);
+    setState(() => _hidden.add(m));
+    final String label;
+    switch (m) {
+      case TransactionWithCategory t:
+        await db.deleteTransaction(t.tx.id);
+        label = t.title;
+      case TransferWithAccounts t:
+        await db.deleteTransfer(t.transfer.id);
+        label = t.title;
+    }
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('"${item.title}" eliminato'),
+          content: Text('"$label" eliminato'),
           action: SnackBarAction(
             label: 'Annulla',
             onPressed: () async {
-              await db.restoreTransaction(item.tx);
-              if (mounted) setState(() => _hidden.remove(item.tx.id));
+              switch (m) {
+                case TransactionWithCategory t:
+                  await db.restoreTransaction(t.tx);
+                case TransferWithAccounts t:
+                  await db.restoreTransfer(t.transfer);
+              }
+              if (mounted) setState(() => _hidden.remove(m));
             },
           ),
         ),
@@ -69,7 +107,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   Widget build(BuildContext context) {
     final month = ref.watch(selectedMonthProvider);
     final monthNotifier = ref.read(selectedMonthProvider.notifier);
-    final async = ref.watch(monthTransactionsProvider);
+    final async = ref.watch(monthMovementsProvider);
+    final accounts = ref.watch(accountsProvider).asData?.value ?? const [];
+    final accountId = ref.watch(accountFilterProvider);
+    final filteredAccount =
+        accounts.where((a) => a.id == accountId).firstOrNull;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Movimenti')),
@@ -80,23 +122,22 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  Row(
-                    children: [
-                      PeriodNavigator(
-                        label: formatMonthYear(month),
-                        onPrevious: monthNotifier.previous,
-                        onNext: monthNotifier.next,
-                        onTapLabel: monthNotifier.reset,
-                      ),
-                      const Spacer(),
-                    ],
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: PeriodNavigator(
+                      label: formatMonthYear(month),
+                      onPrevious: monthNotifier.previous,
+                      onNext: monthNotifier.next,
+                      onTapLabel: monthNotifier.reset,
+                    ),
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _search,
                     decoration: InputDecoration(
-                      hintText: 'Cerca per descrizione o categoria',
+                      hintText: 'Cerca per descrizione, categoria o conto',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _query.isEmpty
                           ? null
@@ -112,27 +153,43 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                     onChanged: (v) => setState(() => _query = v),
                   ),
                   const SizedBox(height: 10),
-                  SizedBox(
-                    height: 40,
-                    child: ListView(
-                      scrollDirection: Axis.horizontal,
+                  _ChipRow(
+                    children: [
+                      for (final (label, f) in [
+                        ('Tutti', _TypeFilter.all),
+                        ('Uscite', _TypeFilter.expense),
+                        ('Entrate', _TypeFilter.income),
+                        ('Trasferimenti', _TypeFilter.transfer),
+                      ])
+                        ChoiceChip(
+                          label: Text(label),
+                          selected: _filter == f,
+                          onSelected: (_) => setState(() => _filter = f),
+                        ),
+                    ],
+                  ),
+                  if (accounts.length > 1) ...[
+                    const SizedBox(height: 8),
+                    _ChipRow(
                       children: [
-                        for (final (label, type) in [
-                          ('Tutti', null),
-                          ('Uscite', TxType.expense),
-                          ('Entrate', TxType.income),
-                        ])
-                          Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              label: Text(label),
-                              selected: _filter == type,
-                              onSelected: (_) => setState(() => _filter = type),
-                            ),
+                        ChoiceChip(
+                          avatar: const Icon(Icons.account_balance_wallet_outlined, size: 18),
+                          label: const Text('Tutti i conti'),
+                          selected: accountId == null,
+                          onSelected: (_) =>
+                              ref.read(accountFilterProvider.notifier).set(null),
+                        ),
+                        for (final a in accounts)
+                          ChoiceChip(
+                            avatar: CategoryAvatar.account(a, size: 22),
+                            label: Text(a.name),
+                            selected: accountId == a.id,
+                            onSelected: (_) =>
+                                ref.read(accountFilterProvider.notifier).set(a.id),
                           ),
                       ],
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -142,15 +199,14 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
               skipLoadingOnReload: true,
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (e, _) => ErrorView(error: e),
-              data: (items) {
-                final filtered = _apply(items);
-                return _TransactionList(
-                  items: filtered,
-                  isFiltered: _query.isNotEmpty || _filter != null,
-                  onTap: (i) => openTransactionForm(context, existing: i),
-                  onDelete: _deleteWithUndo,
-                );
-              },
+              data: (items) => _MovementList(
+                items: items.where((m) => _matches(m, accountId)).toList(),
+                isFiltered: _query.isNotEmpty || _filter != _TypeFilter.all,
+                account: filteredAccount,
+                showAccount: accounts.length > 1 && accountId == null,
+                onTap: (m) => openMovementForm(context, m),
+                onDelete: _deleteWithUndo,
+              ),
             ),
           ),
         ],
@@ -159,38 +215,59 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
   }
 }
 
-class _TransactionList extends StatelessWidget {
-  const _TransactionList({
+class _ChipRow extends StatelessWidget {
+  const _ChipRow({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => SizedBox(
+        height: 40,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          itemCount: children.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 8),
+          itemBuilder: (_, i) => children[i],
+        ),
+      );
+}
+
+class _MovementList extends StatelessWidget {
+  const _MovementList({
     required this.items,
     required this.isFiltered,
+    required this.account,
+    required this.showAccount,
     required this.onTap,
     required this.onDelete,
   });
 
-  final List<TransactionWithCategory> items;
+  final List<Movement> items;
   final bool isFiltered;
-  final ValueChanged<TransactionWithCategory> onTap;
-  final ValueChanged<TransactionWithCategory> onDelete;
+  final AccountEntity? account;
+  final bool showAccount;
+  final ValueChanged<Movement> onTap;
+  final ValueChanged<Movement> onDelete;
 
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
+      final filtered = isFiltered || account != null;
       return Center(
         child: EmptyState(
-          icon: isFiltered ? Icons.search_off_rounded : Icons.receipt_long_rounded,
-          title: isFiltered ? 'Nessun risultato' : 'Nessun movimento',
-          message: isFiltered
-              ? 'Prova a cambiare i filtri o il testo di ricerca.'
+          icon: filtered ? Icons.search_off_rounded : Icons.receipt_long_rounded,
+          title: filtered ? 'Nessun risultato' : 'Nessun movimento',
+          message: filtered
+              ? 'Prova a cambiare i filtri, il conto o il testo di ricerca.'
               : 'Non ci sono movimenti in questo mese. Tocca + per aggiungerne uno.',
         ),
       );
     }
 
-    final summary = PeriodSummary.from(items);
-    final groups = <DateTime, List<TransactionWithCategory>>{};
-    for (final i in items) {
-      final d = DateTime(i.tx.date.year, i.tx.date.month, i.tx.date.day);
-      groups.putIfAbsent(d, () => []).add(i);
+    final groups = <DateTime, List<Movement>>{};
+    for (final m in items) {
+      final d = DateTime(m.date.year, m.date.month, m.date.day);
+      groups.putIfAbsent(d, () => []).add(m);
     }
     final days = groups.keys.toList();
 
@@ -201,16 +278,21 @@ class _TransactionList extends StatelessWidget {
         if (index == 0) {
           return PageContainer(
             maxWidth: 900,
-            child: _SummaryStrip(summary: summary, isFiltered: isFiltered),
+            child: _SummaryStrip(
+              items: items,
+              account: account,
+              isFiltered: isFiltered,
+            ),
           );
         }
         final day = days[index - 1];
-        final dayItems = groups[day]!;
         return PageContainer(
           maxWidth: 900,
           child: _DayGroup(
             day: day,
-            items: dayItems,
+            items: groups[day]!,
+            accountId: account?.id,
+            showAccount: showAccount,
             onTap: onTap,
             onDelete: onDelete,
           ),
@@ -220,15 +302,37 @@ class _TransactionList extends StatelessWidget {
   }
 }
 
-class _SummaryStrip extends StatelessWidget {
-  const _SummaryStrip({required this.summary, required this.isFiltered});
+/// Netto di una voce: per i trasferimenti conta solo se la lista è filtrata
+/// su uno dei due conti.
+int _netOf(Movement m, int? accountId) => switch (m) {
+      TransactionWithCategory t => t.signedCents,
+      TransferWithAccounts t => t.signedCentsFor(accountId),
+    };
 
-  final PeriodSummary summary;
+class _SummaryStrip extends StatelessWidget {
+  const _SummaryStrip({
+    required this.items,
+    required this.account,
+    required this.isFiltered,
+  });
+
+  final List<Movement> items;
+  final AccountEntity? account;
   final bool isFiltered;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final txs = items.whereType<TransactionWithCategory>();
+    final income =
+        txs.where((t) => t.isIncome).fold<int>(0, (s, t) => s + t.tx.amountCents);
+    final expense =
+        txs.where((t) => !t.isIncome).fold<int>(0, (s, t) => s + t.tx.amountCents);
+    final transfersNet = items
+        .whereType<TransferWithAccounts>()
+        .fold<int>(0, (s, t) => s + t.signedCentsFor(account?.id));
+    final hasTransfers = account != null && items.any((m) => m is TransferWithAccounts);
+
     Widget cell(String label, String value, Color? color) => Expanded(
           child: Column(
             children: [
@@ -252,19 +356,22 @@ class _SummaryStrip extends StatelessWidget {
           ),
         );
 
+    final caption = [
+      if (account != null) 'Conto: ${account!.name}',
+      if (isFiltered) plural(items.length, 'voce filtrata', 'voci filtrate'),
+    ].join(' · ');
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: AppCard(
         padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         child: Column(
           children: [
-            if (isFiltered)
+            if (caption.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: Text(
-                  summary.count == 1
-                      ? 'Totale dell\'unico movimento filtrato'
-                      : 'Totali dei ${summary.count} movimenti filtrati',
+                  caption,
                   style: theme.textTheme.labelSmall?.copyWith(
                     color: theme.colorScheme.primary,
                     fontWeight: FontWeight.w700,
@@ -273,9 +380,19 @@ class _SummaryStrip extends StatelessWidget {
               ),
             Row(
               children: [
-                cell('Entrate', formatMoney(summary.incomeCents), AppColors.income),
-                cell('Uscite', formatMoney(summary.expenseCents), AppColors.expense),
-                cell('Saldo', formatMoney(summary.balanceCents), null),
+                cell('Entrate', formatMoney(income), AppColors.income),
+                cell('Uscite', formatMoney(expense), AppColors.expense),
+                if (hasTransfers)
+                  cell(
+                    'Trasferimenti',
+                    formatSignedMoney(transfersNet, isIncome: transfersNet >= 0),
+                    AppColors.transfer,
+                  ),
+                cell(
+                  account == null ? 'Saldo' : 'Variazione',
+                  formatMoney(income - expense + transfersNet),
+                  null,
+                ),
               ],
             ),
           ],
@@ -289,19 +406,23 @@ class _DayGroup extends StatelessWidget {
   const _DayGroup({
     required this.day,
     required this.items,
+    required this.accountId,
+    required this.showAccount,
     required this.onTap,
     required this.onDelete,
   });
 
   final DateTime day;
-  final List<TransactionWithCategory> items;
-  final ValueChanged<TransactionWithCategory> onTap;
-  final ValueChanged<TransactionWithCategory> onDelete;
+  final List<Movement> items;
+  final int? accountId;
+  final bool showAccount;
+  final ValueChanged<Movement> onTap;
+  final ValueChanged<Movement> onDelete;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final net = items.fold<int>(0, (sum, i) => sum + i.signedCents);
+    final net = items.fold<int>(0, (sum, m) => sum + _netOf(m, accountId));
     return Padding(
       padding: const EdgeInsets.only(top: 14),
       child: Column(
@@ -320,13 +441,14 @@ class _DayGroup extends StatelessWidget {
                     ),
                   ),
                 ),
-                Text(
-                  formatSignedMoney(net, isIncome: net >= 0),
-                  style: theme.textTheme.labelLarge?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: theme.colorScheme.onSurfaceVariant,
+                if (net != 0)
+                  Text(
+                    formatSignedMoney(net, isIncome: net >= 0),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -334,10 +456,13 @@ class _DayGroup extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             child: Column(
               children: [
-                for (final (i, item) in items.indexed) ...[
+                for (final (i, m) in items.indexed) ...[
                   if (i > 0) const Divider(indent: 64),
                   Dismissible(
-                    key: ValueKey(item.tx.id),
+                    key: ValueKey(switch (m) {
+                      TransactionWithCategory t => 'tx-${t.tx.id}',
+                      TransferWithAccounts t => 'tr-${t.transfer.id}',
+                    }),
                     direction: DismissDirection.endToStart,
                     background: Container(
                       alignment: Alignment.centerRight,
@@ -351,11 +476,13 @@ class _DayGroup extends StatelessWidget {
                         color: AppColors.expense,
                       ),
                     ),
-                    onDismissed: (_) => onDelete(item),
-                    child: TransactionTile(
-                      item: item,
+                    onDismissed: (_) => onDelete(m),
+                    child: MovementTile(
+                      movement: m,
                       showDate: false,
-                      onTap: () => onTap(item),
+                      showAccount: showAccount,
+                      accountFilter: accountId,
+                      onTap: () => onTap(m),
                     ),
                   ),
                 ],

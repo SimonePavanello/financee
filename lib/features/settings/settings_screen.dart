@@ -5,6 +5,7 @@ import '../../core/theme/app_colors.dart';
 import '../../data/sample_data.dart';
 import '../../providers.dart';
 import '../../widgets/common.dart';
+import 'import_sossoldi_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -14,13 +15,13 @@ class SettingsScreen extends ConsumerWidget {
       context,
       title: 'Caricare i dati di esempio?',
       message:
-          'Verranno aggiunti circa 150 movimenti degli ultimi sei mesi, utili per provare dashboard e report. I tuoi dati restano invariati.',
+          'Verranno aggiunti circa 170 movimenti e trasferimenti degli ultimi sei mesi, più i conti "Contanti" e "Risparmi" se mancano. I tuoi dati restano invariati.',
       action: 'Carica',
     );
     if (ok != true || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     final n = await insertSampleData(ref.read(databaseProvider));
-    messenger.showSnackBar(SnackBar(content: Text('Aggiunti $n movimenti di esempio')));
+    messenger.showSnackBar(SnackBar(content: Text('Aggiunti $n movimenti e trasferimenti di esempio')));
   }
 
   Future<void> _deleteAll(BuildContext context, WidgetRef ref) async {
@@ -29,13 +30,13 @@ class SettingsScreen extends ConsumerWidget {
       context,
       title: 'Eliminare tutti i movimenti?',
       message:
-          'Verranno eliminati definitivamente $count movimenti. Le categorie restano. Se vuoi conservarli, esporta prima un report CSV.',
+          'Verranno eliminati definitivamente $count movimenti e tutti i trasferimenti tra conti. Conti e categorie restano. Se vuoi conservarli, esporta prima un report CSV.',
       action: 'Elimina tutto',
       destructive: true,
     );
     if (ok != true || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
-    final n = await ref.read(databaseProvider).deleteAllTransactions();
+    final n = await ref.read(databaseProvider).deleteAllMovements();
     messenger.showSnackBar(SnackBar(content: Text('Eliminati $n movimenti')));
   }
 
@@ -134,6 +135,18 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       ListTile(
+                        leading: const Icon(Icons.upload_file_rounded),
+                        title: const Text('Importa da Sossoldi'),
+                        subtitle: const Text(
+                          'Conti, categorie, movimenti e trasferimenti da un export CSV',
+                        ),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const ImportSossoldiScreen(),
+                          ),
+                        ),
+                      ),
+                      ListTile(
                         leading: const Icon(Icons.science_rounded),
                         title: const Text('Carica dati di esempio'),
                         subtitle: const Text('Sei mesi di movimenti realistici'),
@@ -148,7 +161,7 @@ class SettingsScreen extends ConsumerWidget {
                           'Elimina tutti i movimenti',
                           style: TextStyle(color: AppColors.expense),
                         ),
-                        subtitle: const Text('Le categorie non vengono toccate'),
+                        subtitle: const Text('Conti e categorie non vengono toccati'),
                         enabled: (count ?? 0) > 0,
                         onTap: () => _deleteAll(context, ref),
                       ),

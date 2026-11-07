@@ -146,6 +146,7 @@ class _ReportBody extends StatelessWidget {
           )
         : null;
     final export = _ExportCard(data: data);
+    final accounts = data.accounts.length > 1 ? _AccountsCard(data: data) : null;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -169,6 +170,7 @@ class _ReportBody extends StatelessWidget {
               gap,
               incomes,
             ],
+            if (accounts != null) ...[gap, accounts],
             if (trend != null) ...[gap, trend],
             gap,
             export,
@@ -389,7 +391,7 @@ class _ExportCardState extends State<_ExportCard> {
       final builder = CsvReportBuilder();
       final csv = full
           ? builder.buildFullReport(widget.data)
-          : builder.buildTransactionsTable(widget.data.transactions);
+          : builder.buildTransactionsTable(widget.data);
       final message = await exportCsv(
         reportFileName(widget.data.period, full: full),
         csv,
@@ -407,7 +409,7 @@ class _ExportCardState extends State<_ExportCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final empty = widget.data.transactions.isEmpty;
+    final empty = widget.data.isEmpty;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -428,7 +430,7 @@ class _ExportCardState extends State<_ExportCard> {
                 child: SectionHeader(
                   title: 'Esporta in CSV',
                   subtitle:
-                      '${widget.data.period.label} · ${plural(widget.data.transactions.length, 'movimento', 'movimenti')} · pronto per Excel, Numbers e Google Sheets',
+                      '${widget.data.period.label} · ${plural(widget.data.transactions.length + widget.data.transfers.length, 'voce', 'voci')} · pronto per Excel, Numbers e Google Sheets',
                 ),
               ),
             ],
@@ -441,14 +443,14 @@ class _ExportCardState extends State<_ExportCard> {
                   icon: Icons.summarize_rounded,
                   title: 'Report completo',
                   description:
-                      'Riepilogo con spiegazioni, totali per categoria, andamento mensile e tutti i movimenti con saldo progressivo.',
+                      'Riepilogo con spiegazioni, saldi dei conti, totali per categoria, andamento mensile, trasferimenti e tutti i movimenti con saldo progressivo.',
                   onTap: empty || _busy ? null : () => _export(full: true),
                 ),
                 _ExportOption(
                   icon: Icons.table_rows_rounded,
                   title: 'Solo movimenti',
                   description:
-                      'Una riga per movimento con importo positivo o negativo: ideale per filtri e tabelle pivot.',
+                      'Una riga per movimento con conto e importo positivo o negativo: ideale per filtri e tabelle pivot.',
                   onTap: empty || _busy ? null : () => _export(full: false),
                 ),
               ];
@@ -546,6 +548,97 @@ class _ExportOption extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Saldi dei conti a inizio e fine periodo.
+class _AccountsCard extends StatelessWidget {
+  const _AccountsCard({required this.data});
+
+  final ReportData data;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final muted = theme.colorScheme.onSurfaceVariant;
+    final start = data.accounts.fold<int>(0, (s, a) => s + a.startCents);
+    final end = data.accounts.fold<int>(0, (s, a) => s + a.endCents);
+
+    return AppCard(
+      padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SectionHeader(
+              title: 'Conti',
+              subtitle:
+                  'Patrimonio da ${formatMoney(start)} a ${formatMoney(end)}',
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final a in data.accounts)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              child: Row(
+                children: [
+                  CategoryAvatar.account(a.account, size: 38),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          a.account.name,
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          [
+                            '+${formatMoney(a.incomeCents)}',
+                            '−${formatMoney(a.expenseCents)}',
+                            if (a.transferNetCents != 0)
+                              '⇄ ${formatSignedMoney(a.transferNetCents, isIncome: a.transferNetCents > 0)}',
+                          ].join('  ·  '),
+                          style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        formatMoney(a.endCents),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: a.endCents < 0 ? AppColors.expense : null,
+                        ),
+                      ),
+                      Text(
+                        a.changeCents == 0
+                            ? 'invariato'
+                            : formatSignedMoney(a.changeCents,
+                                isIncome: a.changeCents > 0),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: a.changeCents > 0
+                              ? AppColors.income
+                              : a.changeCents < 0
+                                  ? AppColors.expense
+                                  : muted,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -4,11 +4,19 @@ import '../core/utils/category_style.dart';
 import '../core/utils/formatters.dart';
 import '../data/app_database.dart';
 
-/// Icona della categoria su un quadrato arrotondato colorato.
+/// Icona (di categoria, conto o trasferimento) su un quadrato arrotondato
+/// colorato.
 class CategoryAvatar extends StatelessWidget {
-  const CategoryAvatar({
+  CategoryAvatar({
     super.key,
-    required this.iconKey,
+    required String iconKey,
+    required this.color,
+    this.size = 44,
+  }) : icon = categoryIcon(iconKey);
+
+  const CategoryAvatar.icon({
+    super.key,
+    required this.icon,
     required this.color,
     this.size = 44,
   });
@@ -16,7 +24,14 @@ class CategoryAvatar extends StatelessWidget {
   factory CategoryAvatar.of(CategoryEntity c, {double size = 44}) =>
       CategoryAvatar(iconKey: c.iconKey, color: Color(c.color), size: size);
 
-  final String iconKey;
+  factory CategoryAvatar.account(AccountEntity a, {double size = 44}) =>
+      CategoryAvatar.icon(
+        icon: accountIcon(a.iconKey),
+        color: Color(a.color),
+        size: size,
+      );
+
+  final IconData icon;
   final Color color;
   final double size;
 
@@ -31,7 +46,7 @@ class CategoryAvatar extends StatelessWidget {
         color: color.withValues(alpha: isDark ? 0.22 : 0.14),
         borderRadius: BorderRadius.circular(size * 0.32),
       ),
-      child: Icon(categoryIcon(iconKey), color: color, size: size * 0.5),
+      child: Icon(icon, color: color, size: size * 0.5),
     );
   }
 }
@@ -128,6 +143,91 @@ class CategoryShareRow extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pallino colorato selezionabile (editor di categorie e conti).
+class ColorDot extends StatelessWidget {
+  const ColorDot({
+    super.key,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 36,
+        height: 36,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: selected ? color : Colors.transparent,
+            width: 2.5,
+          ),
+        ),
+        child: DecoratedBox(
+          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          child: selected
+              ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
+              : null,
+        ),
+      ),
+    );
+  }
+}
+
+/// Icona selezionabile (editor di categorie e conti).
+class IconOption extends StatelessWidget {
+  const IconOption({
+    super.key,
+    required this.icon,
+    required this.color,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final Color color;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: selected
+              ? color.withValues(alpha: 0.16)
+              : scheme.surfaceContainerHigh,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? color : Colors.transparent,
+            width: 1.6,
+          ),
+        ),
+        child: Icon(
+          icon,
+          size: 22,
+          color: selected ? color : scheme.onSurfaceVariant,
         ),
       ),
     );

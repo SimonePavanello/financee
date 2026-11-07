@@ -9,63 +9,134 @@ import '../../data/models.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
+import '../accounts/account_editor_sheet.dart';
 import '../categories/category_editor_sheet.dart';
 
-/// Apre il form. Restituisce `true` se il movimento è stato salvato.
+enum MovementKind { expense, income, transfer }
+
+/// Apre il form per una nuova spesa/entrata (o per modificarne una).
+/// Restituisce `true` se il movimento è stato salvato.
 Future<bool?> openTransactionForm(
   BuildContext context, {
   TransactionWithCategory? existing,
-  TxType initialType = TxType.expense,
+  MovementKind initialKind = MovementKind.expense,
+  int? accountId,
 }) =>
-    Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        fullscreenDialog: true,
-        builder: (_) => TransactionFormScreen(
-          existing: existing,
-          initialType: initialType,
-        ),
+    _open(
+      context,
+      MovementFormScreen(
+        existingTransaction: existing,
+        initialKind: initialKind,
+        initialAccountId: accountId,
       ),
     );
 
-class TransactionFormScreen extends ConsumerStatefulWidget {
-  const TransactionFormScreen({
+/// Apre il form per un nuovo trasferimento tra conti (o per modificarne uno).
+Future<bool?> openTransferForm(
+  BuildContext context, {
+  TransferWithAccounts? existing,
+  int? fromAccountId,
+}) =>
+    _open(
+      context,
+      MovementFormScreen(
+        existingTransfer: existing,
+        initialKind: MovementKind.transfer,
+        initialAccountId: fromAccountId,
+      ),
+    );
+
+/// Apre il form adatto alla voce della lista movimenti.
+Future<bool?> openMovementForm(BuildContext context, Movement movement) =>
+    switch (movement) {
+      TransactionWithCategory t => openTransactionForm(context, existing: t),
+      TransferWithAccounts t => openTransferForm(context, existing: t),
+    };
+
+Future<bool?> _open(BuildContext context, Widget screen) =>
+    Navigator.of(context).push<bool>(
+      MaterialPageRoute(fullscreenDialog: true, builder: (_) => screen),
+    );
+
+class MovementFormScreen extends ConsumerStatefulWidget {
+  const MovementFormScreen({
     super.key,
-    this.existing,
-    this.initialType = TxType.expense,
+    this.existingTransaction,
+    this.existingTransfer,
+    this.initialKind = MovementKind.expense,
+    this.initialAccountId,
   });
 
-  final TransactionWithCategory? existing;
-  final TxType initialType;
+  final TransactionWithCategory? existingTransaction;
+  final TransferWithAccounts? existingTransfer;
+  final MovementKind initialKind;
+
+  /// Conto preselezionato (es. aprendo il form da un conto filtrato).
+  final int? initialAccountId;
 
   @override
-  ConsumerState<TransactionFormScreen> createState() =>
-      _TransactionFormScreenState();
+  ConsumerState<MovementFormScreen> createState() => _MovementFormScreenState();
 }
 
-class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
-  late TxType _type;
+class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
+  late MovementKind _kind;
   late final TextEditingController _amount;
   late final TextEditingController _note;
   late DateTime _date;
   int? _categoryId;
+  int? _accountId;
+  int? _fromId;
+  int? _toId;
   String? _amountError;
   bool _categoryError = false;
+  bool _accountError = false;
+  String? _transferError;
   bool _saving = false;
 
-  bool get _isNew => widget.existing == null;
+  TransactionWithCategory? get _tx => widget.existingTransaction;
+  TransferWithAccounts? get _transfer => widget.existingTransfer;
+  bool get _isNew => _tx == null && _transfer == null;
+  bool get _isTransfer => _kind == MovementKind.transfer;
+  TxType get _txType =>
+      _kind == MovementKind.income ? TxType.income : TxType.expense;
+
+  Color get _kindColor => switch (_kind) {
+        MovementKind.expense => AppColors.expense,
+        MovementKind.income => AppColors.income,
+        MovementKind.transfer => AppColors.transfer,
+      };
 
   @override
   void initState() {
     super.initState();
-    final e = widget.existing;
-    _type = e?.tx.type ?? widget.initialType;
-    _amount = TextEditingController(
-      text: e == null ? '' : centsToInput(e.tx.amountCents),
-    );
-    _note = TextEditingController(text: e?.tx.note ?? '');
     final now = DateTime.now();
-    _date = e?.tx.date ?? DateTime(now.year, now.month, now.day);
-    _categoryId = e?.category.id;
+    _date = DateTime(now.year, now.month, now.day);
+    _kind = widget.initialKind;
+    var amount = 0;
+    var note = '';
+
+    if (_tx case final tx?) {
+      _kind = tx.isIncome ? MovementKind.income : MovementKind.expense;
+      amount = tx.tx.amountCents;
+      note = tx.tx.note;
+      _date = tx.tx.date;
+      _categoryId = tx.category.id;
+      _accountId = tx.account.id;
+    } else if (_transfer case final tr?) {
+      _kind = MovementKind.transfer;
+      amount = tr.amountCents;
+      note = tr.transfer.note;
+      _date = tr.transfer.date;
+      _fromId = tr.from.id;
+      _toId = tr.to.id;
+    } else if (_isTransfer) {
+      _fromId = widget.initialAccountId;
+    } else {
+      _accountId = widget.initialAccountId;
+    }
+
+    _amount = TextEditingController(text: amount == 0 ? '' : centsToInput(amount));
+    _note = TextEditingController(text: note);
   }
 
   @override
@@ -75,11 +146,13 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     super.dispose();
   }
 
-  void _setType(TxType type) {
-    if (type == _type) return;
+  void _setKind(MovementKind kind) {
+    if (kind == _kind) return;
     setState(() {
-      _type = type;
-      _categoryId = null;
+      // Passando da spesa a entrata la categoria non è più valida.
+      if (kind != MovementKind.transfer) _categoryId = null;
+      _kind = kind;
+      _transferError = null;
     });
   }
 
@@ -95,7 +168,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
   }
 
   Future<void> _newCategory() async {
-    final id = await showCategoryEditor(context, initialType: _type);
+    final id = await showCategoryEditor(context, initialType: _txType);
     if (id != null) {
       setState(() {
         _categoryId = id;
@@ -104,36 +177,81 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     }
   }
 
-  Future<void> _save() async {
+  Future<int?> _newAccount() => showAccountEditor(context);
+
+  /// Con un solo conto non c'è niente da chiedere: lo si usa direttamente.
+  int? _effectiveAccountId(List<AccountEntity> accounts) =>
+      _accountId ?? (accounts.length == 1 ? accounts.single.id : null);
+
+  Future<void> _save(List<AccountEntity> accounts) async {
     final cents = parseAmountToCents(_amount.text);
     final amountInvalid = cents == null || cents <= 0;
+    final accountId = _effectiveAccountId(accounts);
+    String? transferError;
+    if (_isTransfer) {
+      if (_fromId == null || _toId == null) {
+        transferError = 'Scegli il conto di origine e quello di destinazione';
+      } else if (_fromId == _toId) {
+        transferError = 'I due conti devono essere diversi';
+      }
+    }
     setState(() {
       _amountError = amountInvalid ? 'Inserisci un importo maggiore di zero' : null;
-      _categoryError = _categoryId == null;
+      _categoryError = !_isTransfer && _categoryId == null;
+      _accountError = !_isTransfer && accountId == null;
+      _transferError = transferError;
     });
-    if (amountInvalid || _categoryId == null) return;
+    if (amountInvalid ||
+        _categoryError ||
+        _accountError ||
+        _transferError != null) {
+      return;
+    }
 
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
     final navigator = Navigator.of(context);
     final note = _note.text.trim();
-    if (_isNew) {
-      await db.addTransaction(
-        type: _type,
-        amountCents: cents,
-        categoryId: _categoryId!,
-        date: _date,
-        note: note,
-      );
-    } else {
+
+    if (_isTransfer) {
+      if (_transfer case final tr?) {
+        await db.updateTransfer(
+          tr.transfer.copyWith(
+            fromAccountId: _fromId,
+            toAccountId: _toId,
+            amountCents: cents,
+            date: _date,
+            note: note,
+          ),
+        );
+      } else {
+        await db.addTransfer(
+          fromAccountId: _fromId!,
+          toAccountId: _toId!,
+          amountCents: cents,
+          date: _date,
+          note: note,
+        );
+      }
+    } else if (_tx case final tx?) {
       await db.updateTransaction(
-        widget.existing!.tx.copyWith(
-          type: _type,
+        tx.tx.copyWith(
+          type: _txType,
           amountCents: cents,
           categoryId: _categoryId,
+          accountId: accountId,
           date: _date,
           note: note,
         ),
+      );
+    } else {
+      await db.addTransaction(
+        type: _txType,
+        amountCents: cents,
+        categoryId: _categoryId!,
+        accountId: accountId!,
+        date: _date,
+        note: note,
       );
     }
     navigator.pop(true);
@@ -143,7 +261,7 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminare il movimento?'),
+        title: Text(_isTransfer ? 'Eliminare il trasferimento?' : 'Eliminare il movimento?'),
         content: const Text('L\'operazione non può essere annullata.'),
         actions: [
           TextButton(
@@ -160,25 +278,42 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
     );
     if (ok != true || !mounted) return;
     final navigator = Navigator.of(context);
-    await ref.read(databaseProvider).deleteTransaction(widget.existing!.tx.id);
+    final db = ref.read(databaseProvider);
+    if (_transfer case final tr?) {
+      await db.deleteTransfer(tr.transfer.id);
+    } else if (_tx case final tx?) {
+      await db.deleteTransaction(tx.tx.id);
+    }
     navigator.pop(false);
+  }
+
+  String get _title {
+    if (_transfer != null) return 'Modifica trasferimento';
+    if (_tx != null) return 'Modifica movimento';
+    return _isTransfer ? 'Nuovo trasferimento' : 'Nuovo movimento';
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final typeColor = AppColors.forIncome(_type == TxType.income);
+    final accounts = ref.watch(accountsProvider).asData?.value ?? const [];
+    final balances = ref.watch(accountBalancesProvider).asData?.value ?? const {};
     final categories = (ref.watch(categoriesProvider).asData?.value ?? const [])
-        .where((c) => c.type == _type)
+        .where((c) => c.type == _txType)
         .toList();
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final yesterday = todayDate.subtract(const Duration(days: 1));
 
+    final kinds = [
+      if (_transfer == null) ...[MovementKind.expense, MovementKind.income],
+      if (_isNew || _transfer != null) MovementKind.transfer,
+    ];
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_isNew ? 'Nuovo movimento' : 'Modifica movimento'),
+        title: Text(_title),
         actions: [
           if (!_isNew)
             IconButton(
@@ -197,109 +332,72 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _TypeToggle(value: _type, onChanged: _setType),
-                const SizedBox(height: 24),
+                if (kinds.length > 1) ...[
+                  _KindToggle(kinds: kinds, value: _kind, onChanged: _setKind),
+                  const SizedBox(height: 24),
+                ],
 
                 // Importo
-                AppCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-                  child: Column(
-                    children: [
-                      Text(
-                        'Importo',
-                        style: theme.textTheme.labelLarge
-                            ?.copyWith(color: scheme.onSurfaceVariant),
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            '€',
-                            style: theme.textTheme.headlineMedium?.copyWith(
-                              color: typeColor,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          ConstrainedBox(
-                            constraints:
-                                const BoxConstraints(minWidth: 120, maxWidth: 360),
-                            child: IntrinsicWidth(
-                              child: TextField(
-                                controller: _amount,
-                                autofocus: _isNew,
-                                keyboardType: const TextInputType.numberWithOptions(
-                                  decimal: true,
-                                ),
-                                inputFormatters: [_AmountInputFormatter()],
-                                textAlign: TextAlign.center,
-                                style: theme.textTheme.displaySmall?.copyWith(
-                                  fontWeight: FontWeight.w800,
-                                  color: typeColor,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: '0,00',
-                                  hintStyle: theme.textTheme.displaySmall?.copyWith(
-                                    fontWeight: FontWeight.w800,
-                                    color: typeColor.withValues(alpha: 0.3),
-                                  ),
-                                  filled: false,
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  contentPadding: EdgeInsets.zero,
-                                ),
-                                onChanged: (_) {
-                                  if (_amountError != null) {
-                                    setState(() => _amountError = null);
-                                  }
-                                },
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (_amountError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6),
-                          child: Text(
-                            _amountError!,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: AppColors.expense),
-                          ),
-                        ),
-                    ],
-                  ),
+                _AmountCard(
+                  controller: _amount,
+                  color: _kindColor,
+                  autofocus: _isNew,
+                  error: _amountError,
+                  onChanged: () {
+                    if (_amountError != null) setState(() => _amountError = null);
+                  },
                 ),
                 const SizedBox(height: 24),
 
-                // Categoria
-                _SectionLabel(
-                  'Categoria',
-                  error: _categoryError ? 'Scegli una categoria' : null,
-                ),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 12,
-                  children: [
-                    for (final c in categories)
-                      _CategoryChoice(
-                        category: c,
-                        selected: c.id == _categoryId,
-                        onTap: () => setState(() {
-                          _categoryId = c.id;
-                          _categoryError = false;
-                        }),
-                      ),
-                    _NewCategoryChoice(onTap: _newCategory),
-                  ],
-                ),
+                if (_isTransfer)
+                  ..._transferSection(accounts, balances)
+                else ...[
+                  // Conto
+                  SectionLabel(
+                    'Conto',
+                    error: _accountError ? 'Scegli il conto' : null,
+                  ),
+                  AccountPicker(
+                    accounts: accounts,
+                    balances: balances,
+                    selectedId: _effectiveAccountId(accounts),
+                    onSelected: (id) => setState(() {
+                      _accountId = id;
+                      _accountError = false;
+                    }),
+                    onCreate: () async {
+                      final id = await _newAccount();
+                      if (id != null) setState(() => _accountId = id);
+                    },
+                  ),
+                  const SizedBox(height: 24),
+
+                  // Categoria
+                  SectionLabel(
+                    'Categoria',
+                    error: _categoryError ? 'Scegli una categoria' : null,
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 12,
+                    children: [
+                      for (final c in categories)
+                        _CategoryChoice(
+                          category: c,
+                          selected: c.id == _categoryId,
+                          onTap: () => setState(() {
+                            _categoryId = c.id;
+                            _categoryError = false;
+                          }),
+                        ),
+                      _NewChoice(label: 'Nuova', onTap: _newCategory),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 24),
 
                 // Data
-                const _SectionLabel('Data'),
+                const SectionLabel('Data'),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -328,20 +426,32 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
                 const SizedBox(height: 24),
 
                 // Nota
-                const _SectionLabel('Descrizione'),
+                const SectionLabel('Descrizione'),
                 TextField(
                   controller: _note,
                   maxLength: 120,
                   textCapitalization: TextCapitalization.sentences,
                   decoration: InputDecoration(
-                    hintText: _type == TxType.income
-                        ? 'Es. Stipendio di novembre'
-                        : 'Es. Spesa al supermercato',
+                    hintText: switch (_kind) {
+                      MovementKind.income => 'Es. Stipendio di novembre',
+                      MovementKind.expense => 'Es. Spesa al supermercato',
+                      MovementKind.transfer => 'Es. Accantonamento mensile',
+                    },
                     prefixIcon: const Icon(Icons.notes_rounded),
                     counterText: '',
                   ),
-                  onSubmitted: (_) => _save(),
+                  onSubmitted: (_) => _save(accounts),
                 ),
+                if (_isTransfer)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: Text(
+                      'Un trasferimento sposta denaro tra i tuoi conti: non conta '
+                      'né come entrata né come spesa nei report.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -353,20 +463,133 @@ class _TransactionFormScreenState extends ConsumerState<TransactionFormScreen> {
           child: PageContainer(
             maxWidth: 640,
             child: GradientButton(
-              label: _isNew ? 'Salva movimento' : 'Salva modifiche',
+              label: _isNew
+                  ? (_isTransfer ? 'Salva trasferimento' : 'Salva movimento')
+                  : 'Salva modifiche',
               icon: Icons.check_rounded,
               loading: _saving,
-              onPressed: _save,
+              onPressed: () => _save(accounts),
             ),
           ),
         ),
       ),
     );
   }
+
+  List<Widget> _transferSection(
+    List<AccountEntity> accounts,
+    Map<int, int> balances,
+  ) {
+    final theme = Theme.of(context);
+    if (accounts.length < 2) {
+      return [
+        AppCard(
+          color: AppColors.transfer.withValues(alpha: 0.06),
+          child: EmptyState(
+            icon: Icons.swap_horiz_rounded,
+            title: 'Servono almeno due conti',
+            message: 'Per spostare denaro crea un altro conto, ad esempio '
+                '"Contanti" o "Risparmi".',
+            actions: [
+              FilledButton.icon(
+                onPressed: () async {
+                  final id = await _newAccount();
+                  if (id != null && _fromId != id) setState(() => _toId = id);
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('Crea un conto'),
+              ),
+            ],
+          ),
+        ),
+      ];
+    }
+
+    void select({int? from, int? to}) => setState(() {
+          _transferError = null;
+          if (from != null) {
+            if (from == _toId) _toId = _fromId; // scambio automatico
+            _fromId = from;
+          }
+          if (to != null) {
+            if (to == _fromId) _fromId = _toId;
+            _toId = to;
+          }
+        });
+
+    final fromName = accounts.where((a) => a.id == _fromId).firstOrNull?.name;
+    final toName = accounts.where((a) => a.id == _toId).firstOrNull?.name;
+
+    return [
+      const SectionLabel('Da'),
+      AccountPicker(
+        accounts: accounts,
+        balances: balances,
+        selectedId: _fromId,
+        onSelected: (id) => select(from: id),
+      ),
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            const Expanded(child: Divider()),
+            IconButton.filledTonal(
+              tooltip: 'Inverti',
+              onPressed: () => setState(() {
+                final f = _fromId;
+                _fromId = _toId;
+                _toId = f;
+              }),
+              icon: const Icon(Icons.swap_vert_rounded),
+            ),
+            const Expanded(child: Divider()),
+          ],
+        ),
+      ),
+      const SectionLabel('A'),
+      AccountPicker(
+        accounts: accounts,
+        balances: balances,
+        selectedId: _toId,
+        onSelected: (id) => select(to: id),
+        onCreate: () async {
+          final id = await _newAccount();
+          if (id != null) select(to: id);
+        },
+      ),
+      if (_transferError != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 10),
+          child: Text(
+            _transferError!,
+            style: theme.textTheme.bodySmall?.copyWith(color: AppColors.expense),
+          ),
+        )
+      else if (fromName != null && toName != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 12),
+          child: Row(
+            children: [
+              const Icon(Icons.east_rounded, size: 18, color: AppColors.transfer),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Da $fromName a $toName',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: AppColors.transfer,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+    ];
+  }
 }
 
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text, {this.error});
+class SectionLabel extends StatelessWidget {
+  const SectionLabel(this.text, {super.key, this.error});
 
   final String text;
   final String? error;
@@ -384,9 +607,11 @@ class _SectionLabel extends StatelessWidget {
           ),
           if (error != null) ...[
             const SizedBox(width: 10),
-            Text(
-              error!,
-              style: theme.textTheme.bodySmall?.copyWith(color: AppColors.expense),
+            Flexible(
+              child: Text(
+                error!,
+                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.expense),
+              ),
             ),
           ],
         ],
@@ -395,17 +620,114 @@ class _SectionLabel extends StatelessWidget {
   }
 }
 
-/// Interruttore animato Spesa / Entrata.
-class _TypeToggle extends StatelessWidget {
-  const _TypeToggle({required this.value, required this.onChanged});
+class _AmountCard extends StatelessWidget {
+  const _AmountCard({
+    required this.controller,
+    required this.color,
+    required this.autofocus,
+    required this.error,
+    required this.onChanged,
+  });
 
-  final TxType value;
-  final ValueChanged<TxType> onChanged;
+  final TextEditingController controller;
+  final Color color;
+  final bool autofocus;
+  final String? error;
+  final VoidCallback onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+      child: Column(
+        children: [
+          Text(
+            'Importo',
+            style: theme.textTheme.labelLarge
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                '€',
+                style: theme.textTheme.headlineMedium?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 8),
+              ConstrainedBox(
+                constraints: const BoxConstraints(minWidth: 120, maxWidth: 360),
+                child: IntrinsicWidth(
+                  child: TextField(
+                    controller: controller,
+                    autofocus: autofocus,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    inputFormatters: [_AmountInputFormatter()],
+                    textAlign: TextAlign.center,
+                    style: theme.textTheme.displaySmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: '0,00',
+                      hintStyle: theme.textTheme.displaySmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                        color: color.withValues(alpha: 0.3),
+                      ),
+                      filled: false,
+                      border: InputBorder.none,
+                      enabledBorder: InputBorder.none,
+                      focusedBorder: InputBorder.none,
+                      contentPadding: EdgeInsets.zero,
+                    ),
+                    onChanged: (_) => onChanged(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (error != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Text(
+                error!,
+                style: theme.textTheme.bodySmall?.copyWith(color: AppColors.expense),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Interruttore animato Spesa / Entrata / Trasferimento.
+class _KindToggle extends StatelessWidget {
+  const _KindToggle({
+    required this.kinds,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final List<MovementKind> kinds;
+  final MovementKind value;
+  final ValueChanged<MovementKind> onChanged;
+
+  static Color _color(MovementKind k) => switch (k) {
+        MovementKind.expense => AppColors.expense,
+        MovementKind.income => AppColors.income,
+        MovementKind.transfer => AppColors.transfer,
+      };
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final isIncome = value == TxType.income;
+    final index = kinds.indexOf(value).clamp(0, kinds.length - 1);
+    final n = kinds.length;
     return Container(
       height: 54,
       padding: const EdgeInsets.all(4),
@@ -419,17 +741,17 @@ class _TypeToggle extends StatelessWidget {
           AnimatedAlign(
             duration: const Duration(milliseconds: 260),
             curve: Curves.easeOutCubic,
-            alignment: isIncome ? Alignment.centerRight : Alignment.centerLeft,
+            alignment: Alignment(n == 1 ? 0 : -1 + 2 * index / (n - 1), 0),
             child: FractionallySizedBox(
-              widthFactor: 0.5,
+              widthFactor: 1 / n,
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 260),
                 decoration: BoxDecoration(
-                  color: AppColors.forIncome(isIncome),
+                  color: _color(value),
                   borderRadius: BorderRadius.circular(14),
                   boxShadow: [
                     BoxShadow(
-                      color: AppColors.forIncome(isIncome).withValues(alpha: 0.35),
+                      color: _color(value).withValues(alpha: 0.35),
                       blurRadius: 12,
                       offset: const Offset(0, 4),
                     ),
@@ -440,10 +762,7 @@ class _TypeToggle extends StatelessWidget {
           ),
           Row(
             children: [
-              _segment(context, 'Spesa', Icons.arrow_downward_rounded,
-                  TxType.expense),
-              _segment(context, 'Entrata', Icons.arrow_upward_rounded,
-                  TxType.income),
+              for (final k in kinds) _segment(context, k),
             ],
           ),
         ],
@@ -451,34 +770,135 @@ class _TypeToggle extends StatelessWidget {
     );
   }
 
-  Widget _segment(
-    BuildContext context,
-    String label,
-    IconData icon,
-    TxType type,
-  ) {
-    final selected = value == type;
+  Widget _segment(BuildContext context, MovementKind kind) {
+    final selected = value == kind;
     final color =
         selected ? Colors.white : Theme.of(context).colorScheme.onSurfaceVariant;
+    final (label, icon) = switch (kind) {
+      MovementKind.expense => ('Spesa', Icons.arrow_downward_rounded),
+      MovementKind.income => ('Entrata', Icons.arrow_upward_rounded),
+      MovementKind.transfer => ('Trasferimento', Icons.swap_horiz_rounded),
+    };
     return Expanded(
       child: InkWell(
         borderRadius: BorderRadius.circular(14),
-        onTap: () => onChanged(type),
+        onTap: () => onChanged(kind),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 18, color: color),
             const SizedBox(width: 6),
-            Text(
-              label,
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: color,
-                    fontWeight: FontWeight.w700,
-                  ),
+            Flexible(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Scelta del conto: una "pillola" per conto con il saldo attuale.
+class AccountPicker extends StatelessWidget {
+  const AccountPicker({
+    super.key,
+    required this.accounts,
+    required this.balances,
+    required this.selectedId,
+    required this.onSelected,
+    this.onCreate,
+  });
+
+  final List<AccountEntity> accounts;
+  final Map<int, int> balances;
+  final int? selectedId;
+  final ValueChanged<int> onSelected;
+  final VoidCallback? onCreate;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: [
+        for (final a in accounts)
+          InkWell(
+            onTap: () => onSelected(a.id),
+            borderRadius: BorderRadius.circular(16),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              padding: const EdgeInsets.fromLTRB(8, 8, 14, 8),
+              decoration: BoxDecoration(
+                color: a.id == selectedId
+                    ? Color(a.color).withValues(alpha: 0.12)
+                    : scheme.surfaceContainerHigh,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: a.id == selectedId ? Color(a.color) : Colors.transparent,
+                  width: 1.6,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CategoryAvatar.account(a, size: 34),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        a.name,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: a.id == selectedId
+                              ? FontWeight.w700
+                              : FontWeight.w600,
+                        ),
+                      ),
+                      Text(
+                        formatMoney(balances[a.id] ?? a.initialBalanceCents),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (onCreate != null)
+          InkWell(
+            onTap: onCreate,
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.fromLTRB(12, 14, 14, 14),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: scheme.outline, width: 1.2),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, size: 18, color: scheme.onSurfaceVariant),
+                  const SizedBox(width: 6),
+                  Text('Nuovo conto', style: theme.textTheme.bodyMedium),
+                ],
+              ),
+            ),
+          ),
+      ],
     );
   }
 }
@@ -533,9 +953,10 @@ class _CategoryChoice extends StatelessWidget {
   }
 }
 
-class _NewCategoryChoice extends StatelessWidget {
-  const _NewCategoryChoice({required this.onTap});
+class _NewChoice extends StatelessWidget {
+  const _NewChoice({required this.label, required this.onTap});
 
+  final String label;
   final VoidCallback onTap;
 
   @override
@@ -561,10 +982,7 @@ class _NewCategoryChoice extends StatelessWidget {
                 child: Icon(Icons.add_rounded, color: scheme.onSurfaceVariant),
               ),
               const SizedBox(height: 6),
-              Text(
-                'Nuova',
-                style: theme.textTheme.labelMedium,
-              ),
+              Text(label, style: theme.textTheme.labelMedium),
             ],
           ),
         ),

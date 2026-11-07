@@ -202,7 +202,7 @@ class _CategoryEditorSheetState extends ConsumerState<CategoryEditorSheet> {
               runSpacing: 10,
               children: [
                 for (final c in kCategoryColors)
-                  _ColorDot(
+                  ColorDot(
                     color: c,
                     selected: c.toARGB32() == _color,
                     onTap: () => setState(() => _color = c.toARGB32()),
@@ -217,7 +217,7 @@ class _CategoryEditorSheetState extends ConsumerState<CategoryEditorSheet> {
               runSpacing: 8,
               children: [
                 for (final entry in kCategoryIcons.entries)
-                  _IconOption(
+                  IconOption(
                     icon: entry.value,
                     color: color,
                     selected: entry.key == _iconKey,
@@ -267,83 +267,3 @@ class _Label extends StatelessWidget {
       );
 }
 
-class _ColorDot extends StatelessWidget {
-  const _ColorDot({
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 36,
-        height: 36,
-        padding: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: selected ? color : Colors.transparent,
-            width: 2.5,
-          ),
-        ),
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          child: selected
-              ? const Icon(Icons.check_rounded, size: 16, color: Colors.white)
-              : null,
-        ),
-      ),
-    );
-  }
-}
-
-class _IconOption extends StatelessWidget {
-  const _IconOption({
-    required this.icon,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          color: selected
-              ? color.withValues(alpha: 0.16)
-              : scheme.surfaceContainerHigh,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? color : Colors.transparent,
-            width: 1.6,
-          ),
-        ),
-        child: Icon(
-          icon,
-          size: 22,
-          color: selected ? color : scheme.onSurfaceVariant,
-        ),
-      ),
-    );
-  }
-}

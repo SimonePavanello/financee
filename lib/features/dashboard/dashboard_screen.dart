@@ -12,9 +12,16 @@ import '../transactions/transaction_form_screen.dart';
 import 'dashboard_widgets.dart';
 
 class DashboardScreen extends ConsumerWidget {
-  const DashboardScreen({super.key, required this.onSeeAll});
+  const DashboardScreen({
+    super.key,
+    required this.onSeeAll,
+    required this.onManageAccounts,
+    required this.onShowAccount,
+  });
 
   final VoidCallback onSeeAll;
+  final VoidCallback onManageAccounts;
+  final ValueChanged<int> onShowAccount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -26,7 +33,12 @@ class DashboardScreen extends ConsumerWidget {
           skipLoadingOnReload: true,
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => ErrorView(error: e),
-          data: (data) => _DashboardContent(data: data, onSeeAll: onSeeAll),
+          data: (data) => _DashboardContent(
+            data: data,
+            onSeeAll: onSeeAll,
+            onManageAccounts: onManageAccounts,
+            onShowAccount: onShowAccount,
+          ),
         ),
       ),
     );
@@ -34,14 +46,23 @@ class DashboardScreen extends ConsumerWidget {
 }
 
 class _DashboardContent extends ConsumerWidget {
-  const _DashboardContent({required this.data, required this.onSeeAll});
+  const _DashboardContent({
+    required this.data,
+    required this.onSeeAll,
+    required this.onManageAccounts,
+    required this.onShowAccount,
+  });
 
   final DashboardData data;
   final VoidCallback onSeeAll;
+  final VoidCallback onManageAccounts;
+  final ValueChanged<int> onShowAccount;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final totalCount = ref.watch(transactionCountProvider).asData?.value;
+    final accountList = ref.watch(accountsProvider).asData?.value ?? const [];
+    final balances = ref.watch(accountBalancesProvider).asData?.value ?? const {};
     final monthNotifier = ref.read(selectedMonthProvider.notifier);
 
     final header = _Header(
@@ -59,7 +80,14 @@ class _DashboardContent extends ConsumerWidget {
     final recent = RecentTransactionsCard(
       items: data.recent,
       onSeeAll: onSeeAll,
-      onTapItem: (i) => openTransactionForm(context, existing: i),
+      showAccount: accountList.length > 1,
+      onTapItem: (m) => openMovementForm(context, m),
+    );
+    final accounts = AccountsOverviewCard(
+      accounts: accountList,
+      balances: balances,
+      onManage: onManageAccounts,
+      onTapAccount: onShowAccount,
     );
     final welcome = totalCount == 0 ? const _WelcomeCard() : null;
 
@@ -92,7 +120,15 @@ class _DashboardContent extends ConsumerWidget {
                           flex: 9,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [?welcome, if (welcome != null) gap, stats, gap, breakdown],
+                            children: [
+                              ?welcome,
+                              if (welcome != null) gap,
+                              accounts,
+                              gap,
+                              stats,
+                              gap,
+                              breakdown,
+                            ],
                           ),
                         ),
                       ],
@@ -101,6 +137,8 @@ class _DashboardContent extends ConsumerWidget {
                     hero,
                     gap,
                     if (welcome != null) ...[welcome, gap],
+                    accounts,
+                    gap,
                     stats,
                     gap,
                     breakdown,

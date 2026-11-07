@@ -49,3 +49,7 @@ app.*.map.json
 
 # Impostazioni locali di Claude Code
 .claude/settings.local.json
+
+# Dati personali / export di altre app: mai nel repository
+sossoldi_export_*.csv
+*.sossoldi.csv

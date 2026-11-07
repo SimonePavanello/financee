@@ -6,6 +6,18 @@
       "runtimeExecutable": "python",
       "runtimeArgs": ["-m", "http.server", "8080", "--bind", "127.0.0.1", "--directory", "build/web"],
       "port": 8080
+    },
+    {
+      "name": "financiee-test",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8090", "--bind", "127.0.0.1", "--directory", "build/web"],
+      "port": 8090
+    },
+    {
+      "name": "financiee-dev",
+      "runtimeExecutable": "D:\\Tools\\flutter\\bin\\flutter.bat",
+      "runtimeArgs": ["run", "-d", "web-server", "--web-port", "8081", "--web-hostname", "localhost"],
+      "port": 8081
     }
   ]
 }

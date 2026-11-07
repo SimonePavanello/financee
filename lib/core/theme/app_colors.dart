@@ -9,6 +9,7 @@ abstract final class AppColors {
 
   static const income = Color(0xFF12B886);
   static const expense = Color(0xFFFF6B6B);
+  static const transfer = Color(0xFF6C7BFF);
   static const warning = Color(0xFFF59E0B);
 
   static const heroGradient = LinearGradient(

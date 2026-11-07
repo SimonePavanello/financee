@@ -21,6 +21,19 @@ CategoryEntity _cat(int id, String name, TxType type) => CategoryEntity(
       createdAt: DateTime(2026),
     );
 
+AccountEntity _acc(int id, String name, [int initial = 0]) => AccountEntity(
+      id: id,
+      name: name,
+      iconKey: 'bank',
+      color: 0xFF6366F1,
+      initialBalanceCents: initial,
+      sortOrder: id,
+      createdAt: DateTime(2026),
+    );
+
+final _main = _acc(1, 'Conto principale', 50000);
+final _savings = _acc(2, 'Risparmi', 100000);
+
 final _spesa = _cat(1, 'Spesa', TxType.expense);
 final _casa = _cat(2, 'Casa', TxType.expense);
 final _stipendio = _cat(3, 'Stipendio', TxType.income);
@@ -31,18 +44,44 @@ TransactionWithCategory _tx(
   int cents,
   DateTime date, [
   String note = '',
+  AccountEntity? account,
+]) {
+  final a = account ?? _main;
+  return TransactionWithCategory(
+    TransactionEntity(
+      id: _nextId++,
+      type: c.type,
+      amountCents: cents,
+      categoryId: c.id,
+      accountId: a.id,
+      date: date,
+      note: note,
+      createdAt: date,
+    ),
+    c,
+    a,
+  );
+}
+
+TransferWithAccounts _transfer(
+  AccountEntity from,
+  AccountEntity to,
+  int cents,
+  DateTime date, [
+  String note = '',
 ]) =>
-    TransactionWithCategory(
-      TransactionEntity(
+    TransferWithAccounts(
+      TransferEntity(
         id: _nextId++,
-        type: c.type,
+        fromAccountId: from.id,
+        toAccountId: to.id,
         amountCents: cents,
-        categoryId: c.id,
         date: date,
         note: note,
         createdAt: date,
       ),
-      c,
+      from,
+      to,
     );
 
 void main() {
@@ -147,7 +186,17 @@ void main() {
       _tx(_casa, 65000, DateTime(2026, 11, 3), 'Affitto'),
       _tx(_stipendio, 200000, DateTime(2026, 11, 1), '=SOMMA(A1)'),
     ]; // ordinati dal più recente, come dal database
-    final data = ReportData.compute(period, items, now: DateTime(2026, 11, 30));
+    final transfers = [
+      _transfer(_main, _savings, 20000, DateTime(2026, 11, 2), 'Accantonamento'),
+    ];
+    final data = ReportData.compute(
+      period,
+      items,
+      transfers: transfers,
+      accounts: [_main, _savings],
+      startBalances: {_main.id: 50000, _savings.id: 100000},
+      now: DateTime(2026, 11, 30),
+    );
     final builder = CsvReportBuilder(generatedAt: DateTime(2026, 11, 30, 18, 5));
 
     test('report completo con sezioni e numeri all\'italiana', () {
@@ -166,19 +215,41 @@ void main() {
     test('dettaglio in ordine cronologico con saldo progressivo', () {
       final lines = builder.buildFullReport(data).split('\r\n');
       final start = lines.indexOf('DETTAGLIO MOVIMENTI') + 2;
-      expect(lines[start], startsWith('01/11/2026;Domenica;Entrata;Stipendio;'));
+      expect(lines[start],
+          startsWith('01/11/2026;Domenica;Entrata;Stipendio;Conto principale;'));
       expect(lines[start], endsWith(';2000,00;;2000,00'));
       expect(lines[start + 1], endsWith(';;650,00;1350,00'));
       expect(lines[start + 2], endsWith(';;45,20;1304,80'));
-      expect(lines[start + 3], 'TOTALE;;;;;2000,00;695,20;1304,80');
+      expect(lines[start + 3], 'TOTALE;;;;;;2000,00;695,20;1304,80');
     });
 
     test('virgolette, separatori e formule nei testi vengono neutralizzati', () {
-      final csv = builder.buildTransactionsTable(items);
+      final csv = builder.buildTransactionsTable(data);
       expect(csv, contains('"Esselunga; spesa ""grossa"""'));
       expect(csv, contains("'=SOMMA(A1)"));
-      expect(csv, contains('04/11/2026;Uscita;Spesa;'));
+      expect(csv, contains('04/11/2026;Uscita;Spesa;Conto principale;'));
       expect(csv, contains(';-45,20'));
+    });
+
+    test('saldi dei conti a inizio e fine periodo', () {
+      final csv = builder.buildFullReport(data);
+      expect(csv, contains('CONTI'));
+      // principale: 500 + 2000 - 695,20 - 200 (trasferimento) = 1604,80
+      expect(csv,
+          contains('Conto principale;500,00;2000,00;695,20;-200,00;1604,80;1104,80'));
+      expect(csv, contains('Risparmi;1000,00;0,00;0,00;200,00;1200,00;200,00'));
+      expect(csv, contains('TOTALE (patrimonio);1500,00;2000,00;695,20;0,00;2804,80;1304,80'));
+    });
+
+    test('i trasferimenti sono elencati a parte e non sono entrate né uscite', () {
+      final csv = builder.buildFullReport(data);
+      expect(csv, contains('TRASFERIMENTI TRA CONTI'));
+      expect(csv, contains('02/11/2026;Lunedì;Conto principale;Risparmi;Accantonamento;200,00'));
+      expect(csv, contains('Trasferimenti tra conti (€);200,00;1 trasferimento'));
+      expect(csv, contains('Uscite totali (€);695,20;2 uscite'));
+      final table = builder.buildTransactionsTable(data);
+      expect(table, contains('02/11/2026;Trasferimento in uscita;Trasferimento;Conto principale;Accantonamento;-200,00'));
+      expect(table, contains('02/11/2026;Trasferimento in entrata;Trasferimento;Risparmi;Accantonamento;200,00'));
     });
 
     test('andamento mensile per periodi di più mesi', () {

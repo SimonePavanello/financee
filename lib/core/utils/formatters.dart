@@ -95,6 +95,16 @@ int? parseAmountToCents(String input) {
   return (value * 100).round();
 }
 
+/// Come [parseAmountToCents] ma accetta un segno meno iniziale
+/// (es. saldo iniziale negativo di una carta di credito).
+int? parseSignedAmountToCents(String input) {
+  final s = input.trim();
+  final negative = s.startsWith('-') || s.startsWith('−');
+  final cents = parseAmountToCents(negative ? s.substring(1) : s);
+  if (cents == null) return null;
+  return negative ? -cents : cents;
+}
+
 /// Centesimi -> testo modificabile nel campo importo ("12,50").
 String centsToInput(int cents) =>
     (cents / 100).toStringAsFixed(2).replaceAll('.', ',');

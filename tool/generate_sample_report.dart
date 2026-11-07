@@ -24,7 +24,14 @@ Future<void> main() async {
   final period = Period.custom(DateTime(2026, 6, 1), DateTime(2026, 11, 30));
   final items =
       await db.watchTransactionsBetween(period.start, period.end).first;
-  final data = ReportData.compute(period, items, now: now);
+  final data = ReportData.compute(
+    period,
+    items,
+    transfers: await db.watchTransfersBetween(period.start, period.end).first,
+    accounts: await db.getAccounts(),
+    startBalances: await db.watchAccountBalances(before: period.start).first,
+    now: now,
+  );
   final builder = CsvReportBuilder(generatedAt: now);
 
   final out = Directory('docs/esempi')..createSync(recursive: true);
@@ -35,6 +42,6 @@ Future<void> main() async {
   }
 
   write('report_finanze_esempio.csv', builder.buildFullReport(data));
-  write('movimenti_esempio.csv', builder.buildTransactionsTable(items));
+  write('movimenti_esempio.csv', builder.buildTransactionsTable(data));
   await db.close();
 }
