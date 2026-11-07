@@ -30,20 +30,20 @@ class MovementTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => switch (movement) {
-        TransactionWithCategory t => TransactionTile(
-            item: t,
-            onTap: onTap,
-            showDate: showDate,
-            showAccount: showAccount,
-            accountFilter: accountFilter,
-          ),
-        TransferWithAccounts t => TransferTile(
-            item: t,
-            onTap: onTap,
-            showDate: showDate,
-            accountFilter: accountFilter,
-          ),
-      };
+    TransactionWithCategory t => TransactionTile(
+      item: t,
+      onTap: onTap,
+      showDate: showDate,
+      showAccount: showAccount,
+      accountFilter: accountFilter,
+    ),
+    TransferWithAccounts t => TransferTile(
+      item: t,
+      onTap: onTap,
+      showDate: showDate,
+      accountFilter: accountFilter,
+    ),
+  };
 }
 
 class TransactionTile extends StatelessWidget {
@@ -54,6 +54,7 @@ class TransactionTile extends StatelessWidget {
     this.showDate = true,
     this.showAccount = false,
     this.accountFilter,
+    this.showDebt = true,
   });
 
   final TransactionWithCategory item;
@@ -62,10 +63,14 @@ class TransactionTile extends StatelessWidget {
   final bool showAccount;
   final int? accountFilter;
 
+  /// Mostra il debito collegato (non serve nel dettaglio del debito).
+  final bool showDebt;
+
   @override
   Widget build(BuildContext context) {
     final tx = item.tx;
     final hasNote = tx.note.trim().isNotEmpty;
+    final debt = showDebt ? item.debt : null;
     // Con il filtro su un conto si vede solo la parte di quel conto.
     final cents = item.centsFor(accountFilter);
     final partial = cents != tx.amountCents;
@@ -87,6 +92,7 @@ class TransactionTile extends StatelessWidget {
         item.isIncome ? 'Entrata' : 'Uscita',
       if (showAccount && split == null) item.account.name,
       ?split,
+      if (debt != null) 'Debito: ${debt.name}',
       if (showDate) formatShortDate(tx.date),
     ];
     return _TileLayout(
@@ -95,7 +101,15 @@ class TransactionTile extends StatelessWidget {
       subtitle: parts.join(' · '),
       amount: formatSignedMoney(cents, isIncome: item.isIncome),
       amountColor: AppColors.forIncome(item.isIncome),
-      badge: item.usesVouchers ? Icons.confirmation_number_rounded : null,
+      badges: [
+        if (item.usesVouchers)
+          (
+            Icons.confirmation_number_rounded,
+            'Pagato in parte con i buoni pasto',
+          ),
+        if (debt != null)
+          (Icons.request_quote_rounded, 'Pagamento di un debito'),
+      ],
       onTap: onTap,
     );
   }
@@ -142,7 +156,7 @@ class _TileLayout extends StatelessWidget {
     required this.subtitle,
     required this.amount,
     required this.amountColor,
-    this.badge,
+    this.badges = const [],
     this.onTap,
   });
 
@@ -152,63 +166,69 @@ class _TileLayout extends StatelessWidget {
   final String amount;
   final Color amountColor;
 
-  /// Piccola icona accanto all'importo (es. spesa pagata con i buoni).
-  final IconData? badge;
+  /// Piccole icone accanto all'importo, con la loro descrizione (es. spesa
+  /// pagata con i buoni, pagamento di un debito).
+  final List<(IconData, String)> badges;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
-        child: Row(
-          children: [
-            leading,
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
+    // Ogni riga è un elemento a sé per i lettori di schermo.
+    return Semantics(
+      container: true,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 10),
+          child: Row(
+            children: [
+              leading,
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            if (badge != null) ...[
-              Icon(
-                badge,
-                size: 16,
-                color: theme.colorScheme.onSurfaceVariant,
-                semanticLabel: 'Pagato in parte con i buoni pasto',
+              const SizedBox(width: 12),
+              for (final (icon, label) in badges) ...[
+                Icon(
+                  icon,
+                  size: 16,
+                  color: theme.colorScheme.onSurfaceVariant,
+                  semanticLabel: label,
+                ),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                amount,
+                style: theme.textTheme.bodyLarge?.copyWith(
+                  fontWeight: FontWeight.w700,
+                  color: amountColor,
+                ),
               ),
-              const SizedBox(width: 6),
             ],
-            Text(
-              amount,
-              style: theme.textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.w700,
-                color: amountColor,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );

@@ -9,6 +9,7 @@ import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
+import '../debts/debt_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 import '../transactions/transaction_form_screen.dart';
 import 'account_editor_sheet.dart';
@@ -90,6 +91,8 @@ class AccountsScreen extends ConsumerWidget {
                         );
                       },
                     ),
+                    const SizedBox(height: 32),
+                    const DebtsSection(),
                   ],
                 ),
               ),

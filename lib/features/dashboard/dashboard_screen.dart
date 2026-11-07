@@ -7,6 +7,7 @@ import '../../data/sample_data.dart';
 import '../../domain/analytics.dart';
 import '../../providers.dart';
 import '../../widgets/common.dart';
+import '../debts/debt_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 import '../settings/settings_screen.dart';
 import '../transactions/transaction_form_screen.dart';
@@ -91,6 +92,11 @@ class _DashboardContent extends ConsumerWidget {
       onTapAccount: onShowAccount,
     );
     final welcome = totalCount == 0 ? const _WelcomeCard() : null;
+    final openDebts = (ref.watch(debtsProvider).asData?.value ?? const [])
+        .where((d) => !d.isPaidOff)
+        .toList();
+    final debts =
+        openDebts.isEmpty ? null : DebtsOverviewCard(debts: openDebts);
     // Con i buoni pasto attivi (o usati nel mese): quanto delle spese coprono.
     final vouchers = ref.watch(mealVoucherAccountProvider) != null ||
             data.current.voucherCents > 0
@@ -133,6 +139,7 @@ class _DashboardContent extends ConsumerWidget {
                               ?welcome,
                               if (welcome != null) gap,
                               accounts,
+                              if (debts != null) ...[gap, debts],
                               gap,
                               stats,
                               gap,
@@ -148,6 +155,7 @@ class _DashboardContent extends ConsumerWidget {
                     gap,
                     if (welcome != null) ...[welcome, gap],
                     accounts,
+                    if (debts != null) ...[gap, debts],
                     gap,
                     stats,
                     gap,

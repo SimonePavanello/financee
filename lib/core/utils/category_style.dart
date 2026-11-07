@@ -77,6 +77,24 @@ const Map<String, IconData> kAccountIcons = {
   'ticket': Icons.confirmation_number_rounded,
 };
 
+/// Icone selezionabili per i debiti.
+const Map<String, IconData> kDebtIcons = {
+  'loan': Icons.request_quote_rounded,
+  'bank': Icons.account_balance_rounded,
+  'home': Icons.home_rounded,
+  'car': Icons.directions_car_rounded,
+  'card': Icons.credit_card_rounded,
+  'person': Icons.person_rounded,
+  'family': Icons.family_restroom_rounded,
+  'school': Icons.school_rounded,
+  'phone': Icons.smartphone_rounded,
+  'laptop': Icons.laptop_mac_rounded,
+  'health': Icons.medical_services_rounded,
+  'store': Icons.storefront_rounded,
+};
+
+IconData debtIcon(String key) => kDebtIcons[key] ?? categoryIcon(key);
+
 IconData categoryIcon(String key) =>
     kCategoryIcons[key] ?? kAccountIcons[key] ?? Icons.category_rounded;
 

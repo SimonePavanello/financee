@@ -26,6 +26,15 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   la card "Buoni pasto" riassume il mese per categoria ("Spesa: hai speso
   300,00 € di cui 140,00 € in buoni pasto"); toccando una riga si apre la
   percentuale coperta dai buoni (46,7%) con la barra e i due importi.
+- **Debiti** (scheda Conti → Debiti): crei un debito con nome, importo da
+  restituire, icona e colore (es. "Prestito auto" 5.000 €). Nel form di una
+  spesa scegli "Pagamento di un debito" e il form dice quanto resterà dopo
+  quel pagamento. Ogni debito mostra quanto resta, la percentuale restituita
+  e una barra che si riempie fino a "Estinto"; toccandolo si apre il
+  dettaglio con l'andamento del residuo nel tempo e tutti i pagamenti
+  collegati (da cui puoi anche registrarne uno nuovo). In dashboard compaiono
+  i debiti ancora da estinguere. Eliminando un debito i pagamenti restano tra
+  i movimenti. Gli importi dei debiti seguono la modalità privacy.
 - **Movimenti**: inserimento rapido di entrate, spese e trasferimenti (importo,
   conto, categoria, data, descrizione), lista raggruppata per giorno con
   totale giornaliero, ricerca, filtri Entrate/Uscite/Trasferimenti e per conto
@@ -81,13 +90,15 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 
 Gli importi sono salvati in **centesimi interi** (niente errori di arrotondamento).
 
-Schema del database (versione 3): `accounts` (con il tipo: normale o buoni
-pasto), `categories`, `transactions` (entrate/uscite, ciascuna con conto e
-categoria; una spesa può avere una parte `voucher_cents` pagata dal conto dei
-buoni `voucher_account_id`), `transfers` (da conto → a conto).
-L'aggiornamento dalle versioni precedenti è automatico (coperto da test di
-migrazione): dalla 1 i movimenti già registrati finiscono in "Conto
-principale"; dalla 2 conti e movimenti restano com'erano, senza buoni.
+Schema del database (versione 4): `accounts` (con il tipo: normale o buoni
+pasto), `categories`, `debts` (debiti con l'importo da restituire),
+`transactions` (entrate/uscite, ciascuna con conto e categoria; una spesa può
+avere una parte `voucher_cents` pagata dal conto dei buoni
+`voucher_account_id` ed essere il pagamento di un debito `debt_id`),
+`transfers` (da conto → a conto). L'aggiornamento dalle versioni precedenti è
+automatico (coperto da test di migrazione): dalla 1 i movimenti già
+registrati finiscono in "Conto principale"; dalla 2 e dalla 3 conti e
+movimenti restano com'erano, senza buoni né debiti.
 
 ## Struttura
 

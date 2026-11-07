@@ -31,6 +31,13 @@ class CategoryAvatar extends StatelessWidget {
         size: size,
       );
 
+  factory CategoryAvatar.debt(DebtEntity d, {double size = 44}) =>
+      CategoryAvatar.icon(
+        icon: debtIcon(d.iconKey),
+        color: Color(d.color),
+        size: size,
+      );
+
   final IconData icon;
   final Color color;
   final double size;

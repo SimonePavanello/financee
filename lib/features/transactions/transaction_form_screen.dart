@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
+import '../../domain/debts.dart';
 import '../../domain/meal_vouchers.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
@@ -14,6 +15,8 @@ import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
 import '../accounts/account_editor_sheet.dart';
 import '../categories/category_editor_sheet.dart';
+import '../debts/debt_editor_sheet.dart';
+import '../debts/debt_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 
 enum MovementKind { expense, income, transfer }
@@ -25,6 +28,7 @@ Future<bool?> openTransactionForm(
   TransactionWithCategory? existing,
   MovementKind initialKind = MovementKind.expense,
   int? accountId,
+  int? debtId,
 }) =>
     _open(
       context,
@@ -32,6 +36,7 @@ Future<bool?> openTransactionForm(
         existingTransaction: existing,
         initialKind: initialKind,
         initialAccountId: accountId,
+        initialDebtId: debtId,
       ),
     );
 
@@ -69,6 +74,7 @@ class MovementFormScreen extends ConsumerStatefulWidget {
     this.existingTransfer,
     this.initialKind = MovementKind.expense,
     this.initialAccountId,
+    this.initialDebtId,
   });
 
   final TransactionWithCategory? existingTransaction;
@@ -77,6 +83,9 @@ class MovementFormScreen extends ConsumerStatefulWidget {
 
   /// Conto preselezionato (es. aprendo il form da un conto filtrato).
   final int? initialAccountId;
+
+  /// Debito preselezionato (aprendo il form dal dettaglio di un debito).
+  final int? initialDebtId;
 
   @override
   ConsumerState<MovementFormScreen> createState() => _MovementFormScreenState();
@@ -101,6 +110,9 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
   bool _useVouchers = false;
   int _voucherCents = 0;
   String? _voucherError;
+
+  /// Debito di cui la spesa è un pagamento.
+  int? _debtId;
 
   TransactionWithCategory? get _tx => widget.existingTransaction;
   TransferWithAccounts? get _transfer => widget.existingTransfer;
@@ -133,6 +145,7 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
       _accountId = tx.account.id;
       _useVouchers = tx.usesVouchers;
       _voucherCents = tx.voucherCents;
+      _debtId = tx.tx.debtId;
     } else if (_transfer case final tr?) {
       _kind = MovementKind.transfer;
       amount = tr.amountCents;
@@ -144,6 +157,7 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
       _fromId = widget.initialAccountId;
     } else {
       _accountId = widget.initialAccountId;
+      _debtId = widget.initialDebtId;
     }
 
     _amount = TextEditingController(text: amount == 0 ? '' : centsToInput(amount));
@@ -255,6 +269,8 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
     }
     final voucherAccountId = useVouchers ? voucherAccount!.id : null;
     final voucherCents = useVouchers ? _voucherCents : 0;
+    // Solo una spesa può essere il pagamento di un debito.
+    final debtId = _kind == MovementKind.expense ? _debtId : null;
 
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
@@ -290,6 +306,7 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
           accountId: accountId,
           voucherAccountId: Value(voucherAccountId),
           voucherCents: voucherCents,
+          debtId: Value(debtId),
           date: _date,
           note: note,
         ),
@@ -302,6 +319,7 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
         accountId: accountId!,
         voucherAccountId: voucherAccountId,
         voucherCents: voucherCents,
+        debtId: debtId,
         date: _date,
         note: note,
       );
@@ -339,6 +357,52 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
     navigator.pop(false);
   }
 
+  /// "Dopo questo pagamento restano X" sotto il debito scelto.
+  Widget? _debtHint(List<DebtSummary> debts) {
+    final debt = debts.where((d) => d.id == _debtId).firstOrNull;
+    final cents = parseAmountToCents(_amount.text);
+    if (debt == null || cents == null || cents <= 0) return null;
+    // Modificando un pagamento dello stesso debito, il suo importo è già
+    // contato tra quelli restituiti.
+    final tx = _tx;
+    final already = tx != null && !tx.isIncome && tx.tx.debtId == debt.id
+        ? tx.tx.amountCents
+        : 0;
+    final after = remainingAfterPayment(debt, cents, alreadyLinkedCents: already);
+    final style = Theme.of(context).textTheme.bodySmall;
+    return Padding(
+      padding: const EdgeInsets.only(top: 10),
+      child: after == 0
+          ? Row(
+              children: [
+                const Icon(
+                  Icons.celebration_rounded,
+                  size: 18,
+                  color: AppColors.income,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Con questo pagamento "${debt.debt.name}" è estinto',
+                    style: style?.copyWith(
+                      color: AppColors.income,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : SensitiveText(
+              visibleText: 'Dopo questo pagamento restano ${formatMoney(after)} '
+                  'su ${formatMoney(debt.amountCents)}',
+              hiddenText: 'Dopo questo pagamento restano $kHiddenAmount',
+              style: style?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+    );
+  }
+
   String get _title {
     if (_transfer != null) return 'Modifica trasferimento';
     if (_tx != null) return 'Modifica movimento';
@@ -356,6 +420,10 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
         .toList();
     ref.watch(mealVoucherAccountProvider);
     final voucherValue = ref.watch(mealVoucherValueProvider);
+    // Debiti da proporre: quelli da estinguere più quello già collegato.
+    final debts = (ref.watch(debtsProvider).asData?.value ?? const [])
+        .where((d) => !d.isPaidOff || d.id == _debtId)
+        .toList();
     final voucherAccount = _voucherAccount;
     final effectiveAccountId = _effectiveAccountId(accounts);
     // Il saldo dei buoni, con quelli già usati da questa spesa restituiti.
@@ -480,6 +548,20 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
                       _NewChoice(label: 'Nuova', onTap: _newCategory),
                     ],
                   ),
+                  if (_kind == MovementKind.expense && debts.isNotEmpty) ...[
+                    const SizedBox(height: 24),
+                    const SectionLabel('Pagamento di un debito'),
+                    DebtPicker(
+                      debts: debts,
+                      selectedId: _debtId,
+                      onSelected: (id) => setState(() => _debtId = id),
+                      onCreate: () async {
+                        final id = await showDebtEditor(context);
+                        if (id != null) setState(() => _debtId = id);
+                      },
+                    ),
+                    ?_debtHint(debts),
+                  ],
                 ],
                 const SizedBox(height: 24),
 

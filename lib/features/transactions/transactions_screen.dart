@@ -47,7 +47,8 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         return q.isEmpty ||
             t.tx.note.toLowerCase().contains(q) ||
             t.category.name.toLowerCase().contains(q) ||
-            t.accountLabel.toLowerCase().contains(q);
+            t.accountLabel.toLowerCase().contains(q) ||
+            (t.debt?.name.toLowerCase().contains(q) ?? false);
       case TransferWithAccounts t:
         if (_filter == _TypeFilter.expense || _filter == _TypeFilter.income) {
           return false;
@@ -137,7 +138,7 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
                   TextField(
                     controller: _search,
                     decoration: InputDecoration(
-                      hintText: 'Cerca per descrizione, categoria o conto',
+                      hintText: 'Cerca per descrizione, categoria, conto o debito',
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _query.isEmpty
                           ? null

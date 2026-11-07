@@ -50,6 +50,28 @@ class Categories extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Debito da restituire (prestito, finanziamento, soldi chiesti a qualcuno).
+/// Le spese collegate ([Transactions.debtId]) sono i pagamenti che lo
+/// riducono, fino a estinguerlo.
+@DataClassName('DebtEntity')
+class Debts extends Table {
+  IntColumn get id => integer().autoIncrement()();
+  TextColumn get name => text().withLength(min: 1, max: 40)();
+
+  /// Importo da restituire, sempre positivo, in centesimi.
+  IntColumn get amountCents => integer()();
+  TextColumn get iconKey => text()();
+
+  /// Colore ARGB a 32 bit.
+  IntColumn get color => integer()();
+  IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Pagamenti di un debito: totale restituito, numero di pagamenti e data
+/// dell'ultimo.
+typedef DebtPayments = ({int paidCents, int count, DateTime? lastDate});
+
 @DataClassName('TransactionEntity')
 @TableIndex(name: 'transactions_date_idx', columns: {#date})
 @TableIndex(name: 'transactions_account_idx', columns: {#accountId})
@@ -74,6 +96,9 @@ class Transactions extends Table {
   /// Parte di [amountCents] pagata con i buoni pasto: 0 se non ci sono buoni,
   /// altrimenti tra 0 e [amountCents] esclusi (vedi [normalizeVoucherSplit]).
   IntColumn get voucherCents => integer().withDefault(const Constant(0))();
+
+  /// Debito che questa spesa contribuisce a restituire (solo per le uscite).
+  IntColumn get debtId => integer().nullable().references(Debts, #id)();
 
   /// Giorno del movimento (mezzanotte, ora locale).
   DateTimeColumn get date => dateTime()();
@@ -123,7 +148,7 @@ class Transfers extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
-@DriftDatabase(tables: [Accounts, Categories, Transactions, Transfers])
+@DriftDatabase(tables: [Accounts, Categories, Debts, Transactions, Transfers])
 class AppDatabase extends _$AppDatabase {
   /// L'executor arriva da `openAppDatabaseConnection()` (vedi connection.dart)
   /// oppure, nei test, da un database in memoria.
@@ -132,8 +157,9 @@ class AppDatabase extends _$AppDatabase {
   /// v1: categorie e movimenti.
   /// v2: conti (ogni movimento appartiene a un conto) e trasferimenti.
   /// v3: buoni pasto (tipo di conto e parte di una spesa pagata con i buoni).
+  /// v4: debiti (le spese possono essere collegate a un debito).
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -143,6 +169,9 @@ class AppDatabase extends _$AppDatabase {
           await _insertDefaultAccount();
         },
         onUpgrade: (m, from, to) async {
+          // Prima di tutto la tabella dei debiti, a cui transactions fa
+          // riferimento.
+          if (from < 4) await m.createTable(debts);
           if (from < 2) {
             await m.createTable(accounts);
             await m.createTable(transfers);
@@ -159,6 +188,7 @@ class AppDatabase extends _$AppDatabase {
                   transactions.accountId,
                   transactions.voucherAccountId,
                   transactions.voucherCents,
+                  transactions.debtId,
                 ],
               ),
             );
@@ -170,6 +200,9 @@ class AppDatabase extends _$AppDatabase {
             await m.addColumn(accounts, accounts.kind);
             await m.addColumn(transactions, transactions.voucherAccountId);
             await m.addColumn(transactions, transactions.voucherCents);
+          }
+          if (from == 2 || from == 3) {
+            await m.addColumn(transactions, transactions.debtId);
           }
         },
         beforeOpen: (details) async {
@@ -473,6 +506,78 @@ class AppDatabase extends _$AppDatabase {
       });
 
   // ---------------------------------------------------------------------------
+  // Debiti
+  // ---------------------------------------------------------------------------
+
+  Stream<List<DebtEntity>> watchDebts() => (select(debts)
+        ..orderBy([
+          (d) => OrderingTerm.asc(d.sortOrder),
+          (d) => OrderingTerm.asc(d.id),
+        ]))
+      .watch();
+
+  Future<List<DebtEntity>> getDebts() => (select(debts)
+        ..orderBy([
+          (d) => OrderingTerm.asc(d.sortOrder),
+          (d) => OrderingTerm.asc(d.id),
+        ]))
+      .get();
+
+  Future<int> createDebt({
+    required String name,
+    required int amountCents,
+    required String iconKey,
+    required int color,
+  }) async {
+    final maxOrder = debts.sortOrder.max();
+    final current = await (selectOnly(debts)..addColumns([maxOrder]))
+        .map((r) => r.read(maxOrder))
+        .getSingle();
+    return into(debts).insert(
+      DebtsCompanion.insert(
+        name: name,
+        amountCents: amountCents,
+        iconKey: iconKey,
+        color: color,
+        sortOrder: Value((current ?? -1) + 1),
+      ),
+    );
+  }
+
+  Future<bool> updateDebt(DebtEntity debt) => update(debts).replace(debt);
+
+  /// Elimina un debito: le spese collegate restano, senza debito.
+  Future<void> deleteDebt(int debtId) => transaction(() async {
+        await (update(transactions)..where((t) => t.debtId.equals(debtId)))
+            .write(const TransactionsCompanion(debtId: Value(null)));
+        await (delete(debts)..where((d) => d.id.equals(debtId))).go();
+      });
+
+  /// Pagamenti di ogni debito (id debito -> totale, numero, ultima data).
+  Stream<Map<int, DebtPayments>> watchDebtPayments() {
+    final sum = transactions.amountCents.sum();
+    final count = transactions.id.count();
+    final last = transactions.date.max();
+    final query = selectOnly(transactions)
+      ..addColumns([transactions.debtId, sum, count, last])
+      ..where(
+        transactions.debtId.isNotNull() &
+            transactions.type.equalsValue(TxType.expense),
+      )
+      ..groupBy([transactions.debtId]);
+    return query.watch().map(
+          (rows) => {
+            for (final r in rows)
+              r.read(transactions.debtId)!: (
+                paidCents: r.read(sum) ?? 0,
+                count: r.read(count) ?? 0,
+                lastDate: r.read(last),
+              ),
+          },
+        );
+  }
+
+  // ---------------------------------------------------------------------------
   // Movimenti (entrate e uscite)
   // ---------------------------------------------------------------------------
 
@@ -480,17 +585,27 @@ class AppDatabase extends _$AppDatabase {
   Stream<List<TransactionWithCategory>> watchTransactionsBetween(
     DateTime start,
     DateTime end,
+  ) =>
+      _watchTransactions(
+        transactions.date.isBiggerOrEqualValue(start) &
+            transactions.date.isSmallerThanValue(end),
+      );
+
+  /// Tutti i pagamenti collegati a un debito, dal più recente.
+  Stream<List<TransactionWithCategory>> watchDebtTransactions(int debtId) =>
+      _watchTransactions(transactions.debtId.equals(debtId));
+
+  Stream<List<TransactionWithCategory>> _watchTransactions(
+    Expression<bool> filter,
   ) {
     final voucher = alias(accounts, 'voucher_account');
     final query = select(transactions).join([
       innerJoin(categories, categories.id.equalsExp(transactions.categoryId)),
       innerJoin(accounts, accounts.id.equalsExp(transactions.accountId)),
       leftOuterJoin(voucher, voucher.id.equalsExp(transactions.voucherAccountId)),
+      leftOuterJoin(debts, debts.id.equalsExp(transactions.debtId)),
     ])
-      ..where(
-        transactions.date.isBiggerOrEqualValue(start) &
-            transactions.date.isSmallerThanValue(end),
-      )
+      ..where(filter)
       ..orderBy([
         OrderingTerm.desc(transactions.date),
         OrderingTerm.desc(transactions.id),
@@ -504,6 +619,7 @@ class AppDatabase extends _$AppDatabase {
                 row.readTable(categories),
                 row.readTable(accounts),
                 row.readTableOrNull(voucher),
+                row.readTableOrNull(debts),
               ),
           ],
         );
@@ -518,7 +634,8 @@ class AppDatabase extends _$AppDatabase {
 
   /// Aggiunge un movimento. Per una spesa pagata in parte con i buoni pasto,
   /// [voucherCents] (compresi in [amountCents]) escono da [voucherAccountId]
-  /// e il resto da [accountId].
+  /// e il resto da [accountId]. Una spesa può essere il pagamento di un
+  /// debito ([debtId]); per le entrate il debito viene ignorato.
   Future<int> addTransaction({
     required TxType type,
     required int amountCents,
@@ -528,6 +645,7 @@ class AppDatabase extends _$AppDatabase {
     String note = '',
     int? voucherAccountId,
     int voucherCents = 0,
+    int? debtId,
   }) {
     final split = normalizeVoucherSplit(
       amountCents: amountCents,
@@ -543,6 +661,7 @@ class AppDatabase extends _$AppDatabase {
         accountId: split.accountId,
         voucherAccountId: Value(split.voucherAccountId),
         voucherCents: Value(split.voucherCents),
+        debtId: Value(type == TxType.expense ? debtId : null),
         date: _day(date),
         note: Value(note),
       ),
@@ -563,6 +682,7 @@ class AppDatabase extends _$AppDatabase {
         accountId: split.accountId,
         voucherAccountId: Value(split.voucherAccountId),
         voucherCents: split.voucherCents,
+        debtId: Value(tx.type == TxType.expense ? tx.debtId : null),
       ),
     );
   }

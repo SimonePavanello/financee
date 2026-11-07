@@ -3,6 +3,7 @@ import 'package:financiee/core/utils/period.dart';
 import 'package:financiee/data/app_database.dart';
 import 'package:financiee/data/models.dart';
 import 'package:financiee/domain/analytics.dart';
+import 'package:financiee/domain/debts.dart';
 import 'package:financiee/domain/meal_vouchers.dart';
 import 'package:financiee/features/reports/csv_report_builder.dart';
 import 'package:intl/date_symbol_data_local.dart';
@@ -398,6 +399,80 @@ void main() {
       final table = builder.buildTransactionsTable(data);
       expect(table, contains('07/11/2026;Uscita;Spesa;Conto principale;Spesa grande;-40,00'));
       expect(table, contains('07/11/2026;Uscita;Spesa;Buoni pasto;Spesa grande;-140,00'));
+    });
+  });
+
+  group('Debiti', () {
+    DebtEntity debt(int id, String name, int cents) => DebtEntity(
+          id: id,
+          name: name,
+          amountCents: cents,
+          iconKey: 'loan',
+          color: 0xFFF43F5E,
+          sortOrder: id,
+          createdAt: DateTime(2026, 9, 1),
+        );
+
+    test('residuo, avanzamento ed estinzione', () {
+      final auto = DebtSummary(debt: debt(1, 'Auto', 500000), paidCents: 180000, paymentCount: 9);
+      expect(auto.remainingCents, 320000);
+      expect(auto.progress, closeTo(0.36, 1e-9));
+      expect(formatPercent(auto.progress), '36,0%');
+      expect(auto.isPaidOff, isFalse);
+      expect(auto.overpaidCents, 0);
+
+      final marco = DebtSummary(debt: debt(2, 'Marco', 10000), paidCents: 12000);
+      expect(marco.isPaidOff, isTrue);
+      expect(marco.remainingCents, 0);
+      expect(marco.progress, 1);
+      expect(marco.overpaidCents, 2000);
+    });
+
+    test('prima i debiti da estinguere, poi quelli estinti', () {
+      final list = DebtSummary.combine(
+        [debt(1, 'Marco', 10000), debt(2, 'Auto', 500000), debt(3, 'Telefono', 60000)],
+        {
+          1: (paidCents: 10000, count: 2, lastDate: DateTime(2026, 10, 1)),
+          2: (paidCents: 50000, count: 1, lastDate: DateTime(2026, 11, 1)),
+        },
+      );
+      expect(list.map((d) => d.debt.name), ['Auto', 'Telefono', 'Marco']);
+      expect(list.last.paymentCount, 2);
+      expect(list[1].paidCents, 0);
+      expect(totalRemainingCents(list), 450000 + 60000);
+    });
+
+    test('quanto resta dopo un pagamento, anche modificandone uno', () {
+      final auto = DebtSummary(debt: debt(1, 'Auto', 500000), paidCents: 180000);
+      expect(remainingAfterPayment(auto, 20000), 300000);
+      expect(remainingAfterPayment(auto, 400000), 0);
+      // Una rata da 200 € già contata portata a 250 €.
+      expect(remainingAfterPayment(auto, 25000, alreadyLinkedCents: 20000), 315000);
+    });
+
+    test('andamento del residuo giorno per giorno', () {
+      final points = debtTimeline(
+        amountCents: 100000,
+        start: DateTime(2026, 9, 1, 15, 30),
+        payments: [
+          (DateTime(2026, 11, 1), 30000),
+          (DateTime(2026, 10, 1), 20000),
+          (DateTime(2026, 11, 1), 10000),
+        ],
+      );
+      expect(points.map((p) => (p.date, p.remainingCents)), [
+        (DateTime(2026, 9, 1), 100000),
+        (DateTime(2026, 10, 1), 80000),
+        (DateTime(2026, 11, 1), 40000),
+      ]);
+      // Un pagamento precedente alla creazione sposta indietro l'inizio.
+      final early = debtTimeline(
+        amountCents: 5000,
+        start: DateTime(2026, 9, 1),
+        payments: [(DateTime(2026, 8, 20), 6000)],
+      );
+      expect(early.first.date, DateTime(2026, 8, 20));
+      expect(early.last.remainingCents, 0);
     });
   });
 }

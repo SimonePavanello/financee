@@ -14,6 +14,7 @@ final class TransactionWithCategory implements Movement {
     this.category,
     this.account, [
     this.voucherAccount,
+    this.debt,
   ]);
 
   final TransactionEntity tx;
@@ -23,6 +24,9 @@ final class TransactionWithCategory implements Movement {
   /// Conto dei buoni pasto, se una parte della spesa è stata pagata con i
   /// buoni ([TransactionEntity.voucherCents]).
   final AccountEntity? voucherAccount;
+
+  /// Debito di cui questa spesa è un pagamento.
+  final DebtEntity? debt;
 
   bool get isIncome => tx.type == TxType.income;
 

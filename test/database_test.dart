@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:financiee/data/app_database.dart';
 import 'package:financiee/data/default_categories.dart';
@@ -445,6 +446,141 @@ void main() {
     await migrated.close();
     await dir.delete(recursive: true);
   });
+  group('debiti', () {
+    test('le spese collegate riducono il debito, le entrate no', () async {
+      final main = (await db.getAccounts()).single.id;
+      final rate = await cat('Trasporti');
+      final auto = await db.createDebt(
+        name: 'Prestito auto',
+        amountCents: 500000,
+        iconKey: 'car',
+        color: 0xFF0EA5E9,
+      );
+      final marco = await db.createDebt(
+        name: 'Soldi da Marco',
+        amountCents: 10000,
+        iconKey: 'person',
+        color: 0xFFF43F5E,
+      );
+      for (final (day, cents) in [(5, 25000), (15, 25000)]) {
+        await db.addTransaction(
+          type: TxType.expense,
+          amountCents: cents,
+          categoryId: rate.id,
+          accountId: main,
+          date: DateTime(2026, 11, day),
+          note: 'Rata',
+          debtId: auto,
+        );
+      }
+      // Un'entrata non può essere un pagamento: il collegamento si perde.
+      await db.addTransaction(
+        type: TxType.income,
+        amountCents: 10000,
+        categoryId: (await cat('Altre entrate')).id,
+        accountId: main,
+        date: DateTime(2026, 11, 2),
+        debtId: marco,
+      );
+      final marcoPayment = await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 10000,
+        categoryId: (await cat('Altre spese')).id,
+        accountId: main,
+        date: DateTime(2026, 11, 20),
+        debtId: marco,
+      );
+
+      final payments = await db.watchDebtPayments().first;
+      expect(payments[auto]?.paidCents, 50000);
+      expect(payments[auto]?.count, 2);
+      expect(payments[auto]?.lastDate, DateTime(2026, 11, 15));
+      expect(payments[marco]?.paidCents, 10000);
+
+      final autoTxs = await db.watchDebtTransactions(auto).first;
+      expect(autoTxs.map((t) => t.tx.date.day), [15, 5]); // dal più recente
+      expect(autoTxs.every((t) => t.debt?.name == 'Prestito auto'), isTrue);
+      final month = await db
+          .watchTransactionsBetween(DateTime(2026, 11), DateTime(2026, 12))
+          .first;
+      expect(month.where((t) => t.debt != null), hasLength(3));
+
+      // Trasformare il pagamento in un'entrata lo scollega dal debito.
+      final tx = (await db.watchDebtTransactions(marco).first).single.tx;
+      expect(tx.id, marcoPayment);
+      await db.updateTransaction(tx.copyWith(type: TxType.income));
+      expect((await db.watchDebtPayments().first)[marco], isNull);
+    });
+
+    test('eliminando un debito i pagamenti restano, scollegati', () async {
+      final main = (await db.getAccounts()).single.id;
+      final id = await db.createDebt(
+        name: 'Telefono a rate',
+        amountCents: 60000,
+        iconKey: 'phone',
+        color: 0xFF8B5CF6,
+      );
+      await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 5000,
+        categoryId: (await cat('Abbonamenti')).id,
+        accountId: main,
+        date: DateTime(2026, 11, 3),
+        debtId: id,
+      );
+      await db.deleteDebt(id);
+      expect(await db.getDebts(), isEmpty);
+      final txs = await db
+          .watchTransactionsBetween(DateTime(2026, 11), DateTime(2026, 12))
+          .first;
+      expect(txs.single.tx.debtId, isNull);
+      expect(txs.single.debt, isNull);
+      expect((await db.watchAccountBalances().first)[main], -5000);
+    });
+  });
+
+  test('migrazione v3 -> v4: movimenti senza debito, debiti utilizzabili', () async {
+    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final file = File('${dir.path}/v3.sqlite');
+    final raw = sqlite3.open(file.path);
+    raw.execute(_schemaV3);
+    raw.execute(
+      "INSERT INTO categories (id, name, type, icon_key, color) "
+      "VALUES (1, 'Spesa', 0, 'cart', 4280401502)",
+    );
+    raw.execute(
+      "INSERT INTO accounts (id, name, icon_key, color, initial_balance_cents, kind) "
+      "VALUES (1, 'Conto principale', 'bank', 4284703473, 10000, 0), "
+      "(2, 'Buoni pasto', 'ticket', 4294538774, 16000, 1)",
+    );
+    raw.execute(
+      "INSERT INTO transactions "
+      "(type, amount_cents, category_id, account_id, voucher_account_id, voucher_cents, date, note) "
+      "VALUES (0, 18000, 1, 1, 2, 14000, 1793833200, 'Spesa grande')",
+    );
+    raw.execute('PRAGMA user_version = 3');
+    raw.close();
+
+    final migrated = AppDatabase(NativeDatabase(file));
+    final txs = await migrated
+        .watchTransactionsBetween(DateTime(2000), DateTime(2100))
+        .first;
+    expect(txs.single.voucherCents, 14000);
+    expect(txs.single.tx.debtId, isNull);
+    final balances = await migrated.watchAccountBalances().first;
+    expect(balances[1], 10000 - 4000);
+    expect(balances[2], 16000 - 14000);
+    final id = await migrated.createDebt(
+      name: 'Prestito',
+      amountCents: 100000,
+      iconKey: 'loan',
+      color: 0xFFF43F5E,
+    );
+    await migrated.updateTransaction(txs.single.tx.copyWith(debtId: Value(id)));
+    expect((await migrated.watchDebtPayments().first)[id]?.paidCents, 18000);
+    await migrated.close();
+    await dir.delete(recursive: true);
+  });
 }
 
 const _schemaV1 = '''
@@ -457,6 +593,16 @@ const _schemaV2 = '''
 CREATE TABLE "accounts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "initial_balance_cents" INTEGER NOT NULL DEFAULT 0, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "account_id" INTEGER NOT NULL REFERENCES accounts (id), "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from_account_id" INTEGER NOT NULL REFERENCES accounts (id), "to_account_id" INTEGER NOT NULL REFERENCES accounts (id), "amount_cents" INTEGER NOT NULL, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE INDEX transactions_date_idx ON transactions (date);
+CREATE INDEX transactions_account_idx ON transactions (account_id);
+CREATE INDEX transfers_date_idx ON transfers (date);
+''';
+
+const _schemaV3 = '''
+CREATE TABLE "accounts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "initial_balance_cents" INTEGER NOT NULL DEFAULT 0, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)), "kind" INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "account_id" INTEGER NOT NULL REFERENCES accounts (id), "voucher_account_id" INTEGER NULL REFERENCES accounts (id), "voucher_cents" INTEGER NOT NULL DEFAULT 0, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from_account_id" INTEGER NOT NULL REFERENCES accounts (id), "to_account_id" INTEGER NOT NULL REFERENCES accounts (id), "amount_cents" INTEGER NOT NULL, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE INDEX transactions_date_idx ON transactions (date);
 CREATE INDEX transactions_account_idx ON transactions (account_id);

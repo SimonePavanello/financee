@@ -8,6 +8,7 @@ import 'data/app_database.dart';
 import 'data/connection.dart';
 import 'data/models.dart';
 import 'domain/analytics.dart';
+import 'domain/debts.dart';
 import 'domain/meal_vouchers.dart';
 
 // -----------------------------------------------------------------------------
@@ -134,6 +135,26 @@ final mealVoucherAccountProvider = Provider<AccountEntity?>(
       ?.value
       .where((a) => a.kind == AccountKind.mealVoucher)
       .firstOrNull,
+);
+
+// -----------------------------------------------------------------------------
+// Debiti
+// -----------------------------------------------------------------------------
+
+/// Debiti con quanto è stato restituito: prima quelli da estinguere.
+final debtsProvider = StreamProvider<List<DebtSummary>>((ref) {
+  final db = ref.watch(databaseProvider);
+  return combineLatest2(
+    db.watchDebts(),
+    db.watchDebtPayments(),
+    DebtSummary.combine,
+  );
+});
+
+/// Tutti i pagamenti collegati a un debito, dal più recente.
+final debtMovementsProvider = StreamProvider.autoDispose
+    .family<List<TransactionWithCategory>, int>(
+  (ref, debtId) => ref.watch(databaseProvider).watchDebtTransactions(debtId),
 );
 
 /// Conto su cui è filtrata la lista movimenti (`null` = tutti).

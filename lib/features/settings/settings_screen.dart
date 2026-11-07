@@ -32,7 +32,7 @@ class SettingsScreen extends ConsumerWidget {
       context,
       title: 'Eliminare tutti i movimenti?',
       message:
-          'Verranno eliminati definitivamente $count movimenti e tutti i trasferimenti tra conti. Conti e categorie restano. Se vuoi conservarli, esporta prima un report CSV.',
+          'Verranno eliminati definitivamente $count movimenti e tutti i trasferimenti tra conti. Conti, categorie e debiti restano (i debiti senza pagamenti). Se vuoi conservarli, esporta prima un report CSV.',
       action: 'Elimina tutto',
       destructive: true,
     );
@@ -191,7 +191,7 @@ class SettingsScreen extends ConsumerWidget {
                           'Elimina tutti i movimenti',
                           style: TextStyle(color: AppColors.expense),
                         ),
-                        subtitle: const Text('Conti e categorie non vengono toccati'),
+                        subtitle: const Text('Conti, categorie e debiti non vengono toccati'),
                         enabled: (count ?? 0) > 0,
                         onTap: () => _deleteAll(context, ref),
                       ),
