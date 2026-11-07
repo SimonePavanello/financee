@@ -43,11 +43,11 @@ class _TransactionsScreenState extends ConsumerState<TransactionsScreen> {
         if (_filter == _TypeFilter.transfer) return false;
         if (_filter == _TypeFilter.expense && t.isIncome) return false;
         if (_filter == _TypeFilter.income && !t.isIncome) return false;
-        if (accountId != null && t.tx.accountId != accountId) return false;
+        if (accountId != null && !t.involves(accountId)) return false;
         return q.isEmpty ||
             t.tx.note.toLowerCase().contains(q) ||
             t.category.name.toLowerCase().contains(q) ||
-            t.account.name.toLowerCase().contains(q);
+            t.accountLabel.toLowerCase().contains(q);
       case TransferWithAccounts t:
         if (_filter == _TypeFilter.expense || _filter == _TypeFilter.income) {
           return false;
@@ -303,9 +303,10 @@ class _MovementList extends StatelessWidget {
 }
 
 /// Netto di una voce: per i trasferimenti conta solo se la lista è filtrata
-/// su uno dei due conti.
+/// su uno dei due conti; per le spese pagate in parte con i buoni, con il
+/// filtro su un conto conta solo la parte di quel conto.
 int _netOf(Movement m, int? accountId) => switch (m) {
-      TransactionWithCategory t => t.signedCents,
+      TransactionWithCategory t => t.signedCentsFor(accountId),
       TransferWithAccounts t => t.signedCentsFor(accountId),
     };
 
@@ -324,10 +325,12 @@ class _SummaryStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final txs = items.whereType<TransactionWithCategory>();
-    final income =
-        txs.where((t) => t.isIncome).fold<int>(0, (s, t) => s + t.tx.amountCents);
-    final expense =
-        txs.where((t) => !t.isIncome).fold<int>(0, (s, t) => s + t.tx.amountCents);
+    final income = txs
+        .where((t) => t.isIncome)
+        .fold<int>(0, (s, t) => s + t.centsFor(account?.id));
+    final expense = txs
+        .where((t) => !t.isIncome)
+        .fold<int>(0, (s, t) => s + t.centsFor(account?.id));
     final transfersNet = items
         .whereType<TransferWithAccounts>()
         .fold<int>(0, (s, t) => s + t.signedCentsFor(account?.id));

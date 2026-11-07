@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' show Value;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,12 +7,14 @@ import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/app_database.dart';
 import '../../data/models.dart';
+import '../../domain/meal_vouchers.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
 import '../accounts/account_editor_sheet.dart';
 import '../categories/category_editor_sheet.dart';
+import '../meal_vouchers/meal_voucher_widgets.dart';
 
 enum MovementKind { expense, income, transfer }
 
@@ -94,6 +97,11 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
   String? _transferError;
   bool _saving = false;
 
+  /// Parte della spesa pagata con i buoni pasto.
+  bool _useVouchers = false;
+  int _voucherCents = 0;
+  String? _voucherError;
+
   TransactionWithCategory? get _tx => widget.existingTransaction;
   TransferWithAccounts? get _transfer => widget.existingTransfer;
   bool get _isNew => _tx == null && _transfer == null;
@@ -123,6 +131,8 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
       _date = tx.tx.date;
       _categoryId = tx.category.id;
       _accountId = tx.account.id;
+      _useVouchers = tx.usesVouchers;
+      _voucherCents = tx.voucherCents;
     } else if (_transfer case final tr?) {
       _kind = MovementKind.transfer;
       amount = tr.amountCents;
@@ -184,10 +194,43 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
   int? _effectiveAccountId(List<AccountEntity> accounts) =>
       _accountId ?? (accounts.length == 1 ? accounts.single.id : null);
 
+  /// Conto dei buoni pasto da offrire nel form: quello già usato dalla spesa
+  /// che si sta modificando, altrimenti quello attivato nelle impostazioni
+  /// (`build` lo osserva, così il form si aggiorna se cambia).
+  AccountEntity? get _voucherAccount =>
+      _tx?.voucherAccount ?? ref.read(mealVoucherAccountProvider);
+
+  /// La sezione buoni ha senso solo per una spesa pagata da un altro conto.
+  bool _showVouchers(int? accountId) {
+    final voucher = _voucherAccount;
+    return _kind == MovementKind.expense &&
+        voucher != null &&
+        accountId != voucher.id;
+  }
+
+  void _setUseVouchers(bool value, int available) => setState(() {
+        _useVouchers = value;
+        _voucherError = null;
+        if (value && _voucherCents == 0) {
+          _voucherCents = suggestedVoucherCents(
+            amountCents: parseAmountToCents(_amount.text) ?? 0,
+            valueCents: ref.read(mealVoucherValueProvider),
+            availableCents: available,
+          );
+        }
+      });
+
   Future<void> _save(List<AccountEntity> accounts) async {
     final cents = parseAmountToCents(_amount.text);
     final amountInvalid = cents == null || cents <= 0;
     final accountId = _effectiveAccountId(accounts);
+    final voucherAccount = _voucherAccount;
+    final useVouchers =
+        _showVouchers(accountId) && _useVouchers && _voucherCents > 0;
+    final voucherError = useVouchers && cents != null && _voucherCents > cents
+        ? 'I buoni (${formatMoney(_voucherCents)}) superano l\'importo della '
+            'spesa: i buoni non danno resto, togline qualcuno.'
+        : null;
     String? transferError;
     if (_isTransfer) {
       if (_fromId == null || _toId == null) {
@@ -201,13 +244,17 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
       _categoryError = !_isTransfer && _categoryId == null;
       _accountError = !_isTransfer && accountId == null;
       _transferError = transferError;
+      _voucherError = voucherError;
     });
     if (amountInvalid ||
         _categoryError ||
         _accountError ||
-        _transferError != null) {
+        _transferError != null ||
+        _voucherError != null) {
       return;
     }
+    final voucherAccountId = useVouchers ? voucherAccount!.id : null;
+    final voucherCents = useVouchers ? _voucherCents : 0;
 
     setState(() => _saving = true);
     final db = ref.read(databaseProvider);
@@ -241,6 +288,8 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
           amountCents: cents,
           categoryId: _categoryId,
           accountId: accountId,
+          voucherAccountId: Value(voucherAccountId),
+          voucherCents: voucherCents,
           date: _date,
           note: note,
         ),
@@ -251,6 +300,8 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
         amountCents: cents,
         categoryId: _categoryId!,
         accountId: accountId!,
+        voucherAccountId: voucherAccountId,
+        voucherCents: voucherCents,
         date: _date,
         note: note,
       );
@@ -303,6 +354,17 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
     final categories = (ref.watch(categoriesProvider).asData?.value ?? const [])
         .where((c) => c.type == _txType)
         .toList();
+    ref.watch(mealVoucherAccountProvider);
+    final voucherValue = ref.watch(mealVoucherValueProvider);
+    final voucherAccount = _voucherAccount;
+    final effectiveAccountId = _effectiveAccountId(accounts);
+    // Il saldo dei buoni, con quelli già usati da questa spesa restituiti.
+    final voucherAvailable = voucherAccount == null
+        ? 0
+        : (balances[voucherAccount.id] ?? voucherAccount.initialBalanceCents) +
+            (_tx?.voucherAccount?.id == voucherAccount.id
+                ? _tx!.voucherCents
+                : 0);
     final today = DateTime.now();
     final todayDate = DateTime(today.year, today.month, today.day);
     final yesterday = todayDate.subtract(const Duration(days: 1));
@@ -344,9 +406,11 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
                   color: _kindColor,
                   autofocus: _isNew,
                   error: _amountError,
-                  onChanged: () {
-                    if (_amountError != null) setState(() => _amountError = null);
-                  },
+                  // Anche la ripartizione con i buoni dipende dall'importo.
+                  onChanged: () => setState(() {
+                    _amountError = null;
+                    _voucherError = null;
+                  }),
                 ),
                 const SizedBox(height: 24),
 
@@ -361,16 +425,38 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
                   AccountPicker(
                     accounts: accounts,
                     balances: balances,
-                    selectedId: _effectiveAccountId(accounts),
+                    selectedId: effectiveAccountId,
                     onSelected: (id) => setState(() {
                       _accountId = id;
                       _accountError = false;
+                      _voucherError = null;
                     }),
                     onCreate: () async {
                       final id = await _newAccount();
                       if (id != null) setState(() => _accountId = id);
                     },
                   ),
+                  if (_showVouchers(effectiveAccountId)) ...[
+                    const SizedBox(height: 12),
+                    VoucherPaymentSection(
+                      voucherAccount: voucherAccount!,
+                      otherAccount: accounts
+                          .where((a) => a.id == effectiveAccountId)
+                          .firstOrNull,
+                      valueCents: voucherValue,
+                      availableCents: voucherAvailable,
+                      amountCents: parseAmountToCents(_amount.text),
+                      enabled: _useVouchers,
+                      voucherCents: _voucherCents,
+                      error: _voucherError,
+                      onEnabledChanged: (v) =>
+                          _setUseVouchers(v, voucherAvailable),
+                      onVoucherCentsChanged: (c) => setState(() {
+                        _voucherCents = c;
+                        _voucherError = null;
+                      }),
+                    ),
+                  ],
                   const SizedBox(height: 24),
 
                   // Categoria

@@ -9,6 +9,7 @@ class CategoryTotal {
     required this.totalCents,
     required this.count,
     required this.share,
+    this.voucherCents = 0,
   });
 
   final CategoryEntity category;
@@ -18,7 +19,13 @@ class CategoryTotal {
   /// Quota sul totale del suo tipo (0..1).
   final double share;
 
+  /// Parte del totale pagata con i buoni pasto.
+  final int voucherCents;
+
   int get averageCents => count == 0 ? 0 : (totalCents / count).round();
+
+  /// Quota del totale coperta dai buoni pasto (0..1).
+  double get voucherShare => totalCents == 0 ? 0 : voucherCents / totalCents;
 }
 
 /// Riepilogo di un insieme di movimenti.
@@ -78,6 +85,16 @@ class PeriodSummary {
   final List<CategoryTotal> incomeByCategory;
   final TransactionWithCategory? biggestExpense;
 
+  /// Uscite pagate con i buoni pasto.
+  int get voucherCents =>
+      expenseByCategory.fold(0, (s, c) => s + c.voucherCents);
+
+  /// Categorie di spesa pagate almeno in parte con i buoni, dalla più
+  /// coperta (in euro).
+  List<CategoryTotal> get voucherCategories =>
+      expenseByCategory.where((c) => c.voucherCents > 0).toList()
+        ..sort((a, b) => b.voucherCents.compareTo(a.voucherCents));
+
   int get balanceCents => incomeCents - expenseCents;
   int get count => incomeCount + expenseCount;
   bool get isEmpty => count == 0;
@@ -99,12 +116,14 @@ List<CategoryTotal> _groupByCategory(
 ) {
   final sums = <int, int>{};
   final counts = <int, int>{};
+  final vouchers = <int, int>{};
   final cats = <int, CategoryEntity>{};
   for (final item in items) {
     final id = item.category.id;
     cats[id] = item.category;
     sums[id] = (sums[id] ?? 0) + item.tx.amountCents;
     counts[id] = (counts[id] ?? 0) + 1;
+    vouchers[id] = (vouchers[id] ?? 0) + item.voucherCents;
   }
   final result = [
     for (final id in sums.keys)
@@ -113,6 +132,7 @@ List<CategoryTotal> _groupByCategory(
         totalCents: sums[id]!,
         count: counts[id]!,
         share: total == 0 ? 0 : sums[id]! / total,
+        voucherCents: vouchers[id]!,
       ),
   ]..sort((a, b) => b.totalCents.compareTo(a.totalCents));
   return result;
@@ -258,12 +278,14 @@ class ReportData {
         AccountPeriodSummary(
           account: a,
           startCents: startBalances[a.id] ?? a.initialBalanceCents,
+          // Le spese pagate in parte con i buoni pesano su ciascun conto
+          // solo per la loro parte.
           incomeCents: items
-              .where((i) => i.isIncome && i.tx.accountId == a.id)
-              .fold(0, (s, i) => s + i.tx.amountCents),
+              .where((i) => i.isIncome)
+              .fold(0, (s, i) => s + i.centsFor(a.id)),
           expenseCents: items
-              .where((i) => !i.isIncome && i.tx.accountId == a.id)
-              .fold(0, (s, i) => s + i.tx.amountCents),
+              .where((i) => !i.isIncome)
+              .fold(0, (s, i) => s + i.centsFor(a.id)),
           transferInCents: transfers
               .where((t) => t.to.id == a.id)
               .fold(0, (s, t) => s + t.amountCents),

@@ -4,10 +4,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/formatters.dart';
 import '../../data/app_database.dart';
+import '../../domain/meal_vouchers.dart';
 import '../../providers.dart';
 import '../../widgets/category_widgets.dart';
 import '../../widgets/common.dart';
 import '../../widgets/privacy.dart';
+import '../meal_vouchers/meal_voucher_widgets.dart';
 import '../transactions/transaction_form_screen.dart';
 import 'account_editor_sheet.dart';
 
@@ -22,6 +24,7 @@ class AccountsScreen extends ConsumerWidget {
     final accounts = ref.watch(accountsProvider);
     final balances = ref.watch(accountBalancesProvider).asData?.value ?? const {};
     final usage = ref.watch(accountUsageProvider).asData?.value ?? const {};
+    final voucherValue = ref.watch(mealVoucherValueProvider);
 
     return Scaffold(
       appBar: AppBar(
@@ -76,6 +79,10 @@ class AccountsScreen extends ConsumerWidget {
                                   account: a,
                                   balance: balances[a.id] ?? a.initialBalanceCents,
                                   usage: usage[a.id] ?? 0,
+                                  voucherValueCents:
+                                      a.kind == AccountKind.mealVoucher
+                                          ? voucherValue
+                                          : null,
                                   onTap: () => onShowMovements(a.id),
                                 ),
                               ),
@@ -179,6 +186,7 @@ class _AccountCard extends StatelessWidget {
     required this.balance,
     required this.usage,
     required this.onTap,
+    this.voucherValueCents,
   });
 
   final AccountEntity account;
@@ -186,10 +194,18 @@ class _AccountCard extends StatelessWidget {
   final int usage;
   final VoidCallback onTap;
 
+  /// Valorizzato solo per il conto dei buoni pasto: il saldo si mostra anche
+  /// come numero di buoni.
+  final int? voucherValueCents;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
+    final voucherValue = voucherValueCents;
+    final details = usage == 0
+        ? 'Nessun movimento'
+        : plural(usage, 'movimento', 'movimenti');
     return AppCard(
       padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
       onTap: onTap,
@@ -216,15 +232,27 @@ class _AccountCard extends StatelessWidget {
                     color: balance < 0 ? AppColors.expense : null,
                   ),
                 ),
-                Text(
-                  usage == 0
-                      ? 'Nessun movimento'
-                      : plural(usage, 'movimento', 'movimenti'),
-                  style: theme.textTheme.labelSmall?.copyWith(color: muted),
-                ),
+                if (voucherValue == null)
+                  Text(
+                    details,
+                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                  )
+                else
+                  SensitiveText(
+                    visibleText:
+                        '${formatVoucherCount(balance, voucherValue)} · $details',
+                    hiddenText: 'Buoni pasto · $details',
+                    style: theme.textTheme.labelSmall?.copyWith(color: muted),
+                  ),
               ],
             ),
           ),
+          if (voucherValue != null)
+            IconButton(
+              tooltip: 'Aggiungi buoni ricevuti',
+              onPressed: () => showAddVouchersSheet(context),
+              icon: Icon(Icons.add_circle_outline_rounded, size: 22, color: muted),
+            ),
           IconButton(
             tooltip: 'Modifica conto',
             onPressed: () => showAccountEditor(context, existing: account),

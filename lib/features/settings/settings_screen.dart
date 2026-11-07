@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/formatters.dart';
 import '../../data/sample_data.dart';
 import '../../providers.dart';
 import '../../widgets/common.dart';
+import '../meal_vouchers/meal_voucher_widgets.dart';
 import 'import_sossoldi_screen.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -145,6 +147,8 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 20),
+                const MealVoucherSettingsCard(),
+                const SizedBox(height: 20),
                 AppCard(
                   padding: const EdgeInsets.fromLTRB(12, 20, 12, 12),
                   child: Column(
@@ -156,7 +160,7 @@ class SettingsScreen extends ConsumerWidget {
                           title: 'Dati',
                           subtitle: count == null
                               ? 'Salvati solo su questo dispositivo'
-                              : '$count movimenti salvati su questo dispositivo',
+                              : '${plural(count, 'movimento salvato', 'movimenti salvati')} su questo dispositivo',
                         ),
                       ),
                       const SizedBox(height: 8),

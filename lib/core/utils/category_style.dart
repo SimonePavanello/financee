@@ -52,6 +52,7 @@ const Map<String, IconData> kCategoryIcons = {
   'redeem': Icons.redeem_rounded,
   'rent': Icons.real_estate_agent_rounded,
   'sell': Icons.sell_rounded,
+  'ticket': Icons.confirmation_number_rounded,
   'other': Icons.category_rounded,
 };
 
@@ -73,6 +74,7 @@ const Map<String, IconData> kAccountIcons = {
   'bitcoin': Icons.currency_bitcoin_rounded,
   'euro': Icons.euro_rounded,
   'store': Icons.storefront_rounded,
+  'ticket': Icons.confirmation_number_rounded,
 };
 
 IconData categoryIcon(String key) =>

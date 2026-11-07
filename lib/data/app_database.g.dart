@@ -91,6 +91,16 @@ class $AccountsTable extends Accounts
     defaultValue: currentDateAndTime,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<AccountKind, int> kind =
+      GeneratedColumn<int>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: Constant(AccountKind.standard.index),
+      ).withConverter<AccountKind>($AccountsTable.$converterkind);
+  @override
   List<GeneratedColumn> get $columns => [
     id,
     name,
@@ -99,6 +109,7 @@ class $AccountsTable extends Accounts
     initialBalanceCents,
     sortOrder,
     createdAt,
+    kind,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -197,6 +208,12 @@ class $AccountsTable extends Accounts
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      kind: $AccountsTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
     );
   }
 
@@ -204,6 +221,9 @@ class $AccountsTable extends Accounts
   $AccountsTable createAlias(String alias) {
     return $AccountsTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<AccountKind, int, int> $converterkind =
+      const EnumIndexConverter<AccountKind>(AccountKind.values);
 }
 
 class AccountEntity extends DataClass implements Insertable<AccountEntity> {
@@ -219,6 +239,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
   final int initialBalanceCents;
   final int sortOrder;
   final DateTime createdAt;
+  final AccountKind kind;
   const AccountEntity({
     required this.id,
     required this.name,
@@ -227,6 +248,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
     required this.initialBalanceCents,
     required this.sortOrder,
     required this.createdAt,
+    required this.kind,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -238,6 +260,9 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
     map['initial_balance_cents'] = Variable<int>(initialBalanceCents);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
+    {
+      map['kind'] = Variable<int>($AccountsTable.$converterkind.toSql(kind));
+    }
     return map;
   }
 
@@ -250,6 +275,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
       initialBalanceCents: Value(initialBalanceCents),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
+      kind: Value(kind),
     );
   }
 
@@ -268,6 +294,9 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
       ),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      kind: $AccountsTable.$converterkind.fromJson(
+        serializer.fromJson<int>(json['kind']),
+      ),
     );
   }
   @override
@@ -281,6 +310,9 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
       'initialBalanceCents': serializer.toJson<int>(initialBalanceCents),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'kind': serializer.toJson<int>(
+        $AccountsTable.$converterkind.toJson(kind),
+      ),
     };
   }
 
@@ -292,6 +324,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
     int? initialBalanceCents,
     int? sortOrder,
     DateTime? createdAt,
+    AccountKind? kind,
   }) => AccountEntity(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -300,6 +333,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
     initialBalanceCents: initialBalanceCents ?? this.initialBalanceCents,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
+    kind: kind ?? this.kind,
   );
   AccountEntity copyWithCompanion(AccountsCompanion data) {
     return AccountEntity(
@@ -312,6 +346,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
           : this.initialBalanceCents,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      kind: data.kind.present ? data.kind.value : this.kind,
     );
   }
 
@@ -324,7 +359,8 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
           ..write('color: $color, ')
           ..write('initialBalanceCents: $initialBalanceCents, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('kind: $kind')
           ..write(')'))
         .toString();
   }
@@ -338,6 +374,7 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
     initialBalanceCents,
     sortOrder,
     createdAt,
+    kind,
   );
   @override
   bool operator ==(Object other) =>
@@ -349,7 +386,8 @@ class AccountEntity extends DataClass implements Insertable<AccountEntity> {
           other.color == this.color &&
           other.initialBalanceCents == this.initialBalanceCents &&
           other.sortOrder == this.sortOrder &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.kind == this.kind);
 }
 
 class AccountsCompanion extends UpdateCompanion<AccountEntity> {
@@ -360,6 +398,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
   final Value<int> initialBalanceCents;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
+  final Value<AccountKind> kind;
   const AccountsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -368,6 +407,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
     this.initialBalanceCents = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.kind = const Value.absent(),
   });
   AccountsCompanion.insert({
     this.id = const Value.absent(),
@@ -377,6 +417,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
     this.initialBalanceCents = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.kind = const Value.absent(),
   }) : name = Value(name),
        iconKey = Value(iconKey),
        color = Value(color);
@@ -388,6 +429,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
     Expression<int>? initialBalanceCents,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
+    Expression<int>? kind,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -398,6 +440,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
         'initial_balance_cents': initialBalanceCents,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
+      if (kind != null) 'kind': kind,
     });
   }
 
@@ -409,6 +452,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
     Value<int>? initialBalanceCents,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
+    Value<AccountKind>? kind,
   }) {
     return AccountsCompanion(
       id: id ?? this.id,
@@ -418,6 +462,7 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
       initialBalanceCents: initialBalanceCents ?? this.initialBalanceCents,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
+      kind: kind ?? this.kind,
     );
   }
 
@@ -445,6 +490,11 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<int>(
+        $AccountsTable.$converterkind.toSql(kind.value),
+      );
+    }
     return map;
   }
 
@@ -457,7 +507,8 @@ class AccountsCompanion extends UpdateCompanion<AccountEntity> {
           ..write('color: $color, ')
           ..write('initialBalanceCents: $initialBalanceCents, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('kind: $kind')
           ..write(')'))
         .toString();
   }
@@ -978,6 +1029,32 @@ class $TransactionsTable extends Transactions
       'REFERENCES accounts (id)',
     ),
   );
+  static const VerificationMeta _voucherAccountIdMeta = const VerificationMeta(
+    'voucherAccountId',
+  );
+  @override
+  late final GeneratedColumn<int> voucherAccountId = GeneratedColumn<int>(
+    'voucher_account_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'REFERENCES accounts (id)',
+    ),
+  );
+  static const VerificationMeta _voucherCentsMeta = const VerificationMeta(
+    'voucherCents',
+  );
+  @override
+  late final GeneratedColumn<int> voucherCents = GeneratedColumn<int>(
+    'voucher_cents',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
   static const VerificationMeta _dateMeta = const VerificationMeta('date');
   @override
   late final GeneratedColumn<DateTime> date = GeneratedColumn<DateTime>(
@@ -1016,6 +1093,8 @@ class $TransactionsTable extends Transactions
     amountCents,
     categoryId,
     accountId,
+    voucherAccountId,
+    voucherCents,
     date,
     note,
     createdAt,
@@ -1061,6 +1140,24 @@ class $TransactionsTable extends Transactions
       );
     } else if (isInserting) {
       context.missing(_accountIdMeta);
+    }
+    if (data.containsKey('voucher_account_id')) {
+      context.handle(
+        _voucherAccountIdMeta,
+        voucherAccountId.isAcceptableOrUnknown(
+          data['voucher_account_id']!,
+          _voucherAccountIdMeta,
+        ),
+      );
+    }
+    if (data.containsKey('voucher_cents')) {
+      context.handle(
+        _voucherCentsMeta,
+        voucherCents.isAcceptableOrUnknown(
+          data['voucher_cents']!,
+          _voucherCentsMeta,
+        ),
+      );
     }
     if (data.containsKey('date')) {
       context.handle(
@@ -1113,6 +1210,14 @@ class $TransactionsTable extends Transactions
         DriftSqlType.int,
         data['${effectivePrefix}account_id'],
       )!,
+      voucherAccountId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voucher_account_id'],
+      ),
+      voucherCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}voucher_cents'],
+      )!,
       date: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}date'],
@@ -1142,10 +1247,22 @@ class TransactionEntity extends DataClass
   final int id;
   final TxType type;
 
-  /// Importo sempre positivo, in centesimi (evita gli errori dei double).
+  /// Importo totale, sempre positivo, in centesimi (evita gli errori dei
+  /// double). Se c'è una parte pagata con i buoni pasto, è compresa qui.
   final int amountCents;
   final int categoryId;
+
+  /// Conto da cui esce (o in cui entra) l'importo, esclusa l'eventuale
+  /// parte pagata con i buoni pasto.
   final int accountId;
+
+  /// Conto dei buoni pasto usati per pagare una parte della spesa
+  /// ([voucherCents]). Nullo se la spesa è pagata tutta con [accountId].
+  final int? voucherAccountId;
+
+  /// Parte di [amountCents] pagata con i buoni pasto: 0 se non ci sono buoni,
+  /// altrimenti tra 0 e [amountCents] esclusi (vedi [normalizeVoucherSplit]).
+  final int voucherCents;
 
   /// Giorno del movimento (mezzanotte, ora locale).
   final DateTime date;
@@ -1157,6 +1274,8 @@ class TransactionEntity extends DataClass
     required this.amountCents,
     required this.categoryId,
     required this.accountId,
+    this.voucherAccountId,
+    required this.voucherCents,
     required this.date,
     required this.note,
     required this.createdAt,
@@ -1173,6 +1292,10 @@ class TransactionEntity extends DataClass
     map['amount_cents'] = Variable<int>(amountCents);
     map['category_id'] = Variable<int>(categoryId);
     map['account_id'] = Variable<int>(accountId);
+    if (!nullToAbsent || voucherAccountId != null) {
+      map['voucher_account_id'] = Variable<int>(voucherAccountId);
+    }
+    map['voucher_cents'] = Variable<int>(voucherCents);
     map['date'] = Variable<DateTime>(date);
     map['note'] = Variable<String>(note);
     map['created_at'] = Variable<DateTime>(createdAt);
@@ -1186,6 +1309,10 @@ class TransactionEntity extends DataClass
       amountCents: Value(amountCents),
       categoryId: Value(categoryId),
       accountId: Value(accountId),
+      voucherAccountId: voucherAccountId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(voucherAccountId),
+      voucherCents: Value(voucherCents),
       date: Value(date),
       note: Value(note),
       createdAt: Value(createdAt),
@@ -1205,6 +1332,8 @@ class TransactionEntity extends DataClass
       amountCents: serializer.fromJson<int>(json['amountCents']),
       categoryId: serializer.fromJson<int>(json['categoryId']),
       accountId: serializer.fromJson<int>(json['accountId']),
+      voucherAccountId: serializer.fromJson<int?>(json['voucherAccountId']),
+      voucherCents: serializer.fromJson<int>(json['voucherCents']),
       date: serializer.fromJson<DateTime>(json['date']),
       note: serializer.fromJson<String>(json['note']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -1221,6 +1350,8 @@ class TransactionEntity extends DataClass
       'amountCents': serializer.toJson<int>(amountCents),
       'categoryId': serializer.toJson<int>(categoryId),
       'accountId': serializer.toJson<int>(accountId),
+      'voucherAccountId': serializer.toJson<int?>(voucherAccountId),
+      'voucherCents': serializer.toJson<int>(voucherCents),
       'date': serializer.toJson<DateTime>(date),
       'note': serializer.toJson<String>(note),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -1233,6 +1364,8 @@ class TransactionEntity extends DataClass
     int? amountCents,
     int? categoryId,
     int? accountId,
+    Value<int?> voucherAccountId = const Value.absent(),
+    int? voucherCents,
     DateTime? date,
     String? note,
     DateTime? createdAt,
@@ -1242,6 +1375,10 @@ class TransactionEntity extends DataClass
     amountCents: amountCents ?? this.amountCents,
     categoryId: categoryId ?? this.categoryId,
     accountId: accountId ?? this.accountId,
+    voucherAccountId: voucherAccountId.present
+        ? voucherAccountId.value
+        : this.voucherAccountId,
+    voucherCents: voucherCents ?? this.voucherCents,
     date: date ?? this.date,
     note: note ?? this.note,
     createdAt: createdAt ?? this.createdAt,
@@ -1257,6 +1394,12 @@ class TransactionEntity extends DataClass
           ? data.categoryId.value
           : this.categoryId,
       accountId: data.accountId.present ? data.accountId.value : this.accountId,
+      voucherAccountId: data.voucherAccountId.present
+          ? data.voucherAccountId.value
+          : this.voucherAccountId,
+      voucherCents: data.voucherCents.present
+          ? data.voucherCents.value
+          : this.voucherCents,
       date: data.date.present ? data.date.value : this.date,
       note: data.note.present ? data.note.value : this.note,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
@@ -1271,6 +1414,8 @@ class TransactionEntity extends DataClass
           ..write('amountCents: $amountCents, ')
           ..write('categoryId: $categoryId, ')
           ..write('accountId: $accountId, ')
+          ..write('voucherAccountId: $voucherAccountId, ')
+          ..write('voucherCents: $voucherCents, ')
           ..write('date: $date, ')
           ..write('note: $note, ')
           ..write('createdAt: $createdAt')
@@ -1285,6 +1430,8 @@ class TransactionEntity extends DataClass
     amountCents,
     categoryId,
     accountId,
+    voucherAccountId,
+    voucherCents,
     date,
     note,
     createdAt,
@@ -1298,6 +1445,8 @@ class TransactionEntity extends DataClass
           other.amountCents == this.amountCents &&
           other.categoryId == this.categoryId &&
           other.accountId == this.accountId &&
+          other.voucherAccountId == this.voucherAccountId &&
+          other.voucherCents == this.voucherCents &&
           other.date == this.date &&
           other.note == this.note &&
           other.createdAt == this.createdAt);
@@ -1309,6 +1458,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
   final Value<int> amountCents;
   final Value<int> categoryId;
   final Value<int> accountId;
+  final Value<int?> voucherAccountId;
+  final Value<int> voucherCents;
   final Value<DateTime> date;
   final Value<String> note;
   final Value<DateTime> createdAt;
@@ -1318,6 +1469,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
     this.amountCents = const Value.absent(),
     this.categoryId = const Value.absent(),
     this.accountId = const Value.absent(),
+    this.voucherAccountId = const Value.absent(),
+    this.voucherCents = const Value.absent(),
     this.date = const Value.absent(),
     this.note = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1328,6 +1481,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
     required int amountCents,
     required int categoryId,
     required int accountId,
+    this.voucherAccountId = const Value.absent(),
+    this.voucherCents = const Value.absent(),
     required DateTime date,
     this.note = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -1342,6 +1497,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
     Expression<int>? amountCents,
     Expression<int>? categoryId,
     Expression<int>? accountId,
+    Expression<int>? voucherAccountId,
+    Expression<int>? voucherCents,
     Expression<DateTime>? date,
     Expression<String>? note,
     Expression<DateTime>? createdAt,
@@ -1352,6 +1509,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
       if (amountCents != null) 'amount_cents': amountCents,
       if (categoryId != null) 'category_id': categoryId,
       if (accountId != null) 'account_id': accountId,
+      if (voucherAccountId != null) 'voucher_account_id': voucherAccountId,
+      if (voucherCents != null) 'voucher_cents': voucherCents,
       if (date != null) 'date': date,
       if (note != null) 'note': note,
       if (createdAt != null) 'created_at': createdAt,
@@ -1364,6 +1523,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
     Value<int>? amountCents,
     Value<int>? categoryId,
     Value<int>? accountId,
+    Value<int?>? voucherAccountId,
+    Value<int>? voucherCents,
     Value<DateTime>? date,
     Value<String>? note,
     Value<DateTime>? createdAt,
@@ -1374,6 +1535,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
       amountCents: amountCents ?? this.amountCents,
       categoryId: categoryId ?? this.categoryId,
       accountId: accountId ?? this.accountId,
+      voucherAccountId: voucherAccountId ?? this.voucherAccountId,
+      voucherCents: voucherCents ?? this.voucherCents,
       date: date ?? this.date,
       note: note ?? this.note,
       createdAt: createdAt ?? this.createdAt,
@@ -1400,6 +1563,12 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
     if (accountId.present) {
       map['account_id'] = Variable<int>(accountId.value);
     }
+    if (voucherAccountId.present) {
+      map['voucher_account_id'] = Variable<int>(voucherAccountId.value);
+    }
+    if (voucherCents.present) {
+      map['voucher_cents'] = Variable<int>(voucherCents.value);
+    }
     if (date.present) {
       map['date'] = Variable<DateTime>(date.value);
     }
@@ -1420,6 +1589,8 @@ class TransactionsCompanion extends UpdateCompanion<TransactionEntity> {
           ..write('amountCents: $amountCents, ')
           ..write('categoryId: $categoryId, ')
           ..write('accountId: $accountId, ')
+          ..write('voucherAccountId: $voucherAccountId, ')
+          ..write('voucherCents: $voucherCents, ')
           ..write('date: $date, ')
           ..write('note: $note, ')
           ..write('createdAt: $createdAt')
@@ -1939,6 +2110,7 @@ typedef $$AccountsTableCreateCompanionBuilder = AccountsCompanion Function({
   Value<int> initialBalanceCents,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
+  Value<AccountKind> kind,
 });
 typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<int> id,
@@ -1948,30 +2120,8 @@ typedef $$AccountsTableUpdateCompanionBuilder = AccountsCompanion Function({
   Value<int> initialBalanceCents,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
+  Value<AccountKind> kind,
 });
-
-final class $$AccountsTableReferences
-    extends BaseReferences<_$AppDatabase, $AccountsTable, AccountEntity> {
-  $$AccountsTableReferences(super.$_db, super.$_table, super.$_typedResult);
-
-  static MultiTypedResultKey<$TransactionsTable, List<TransactionEntity>>
-  _transactionsRefsTable(_$AppDatabase db) => MultiTypedResultKey.fromTable(
-    db.transactions,
-    aliasName: 'accounts__id__transactions__account_id',
-  );
-
-  $$TransactionsTableProcessedTableManager get transactionsRefs {
-    final manager = $$TransactionsTableTableManager(
-      $_db,
-      $_db.transactions,
-    ).filter((f) => f.accountId.id.sqlEquals($_itemColumn<int>('id')!));
-
-    final cache = $_typedResult.readTableOrNull(_transactionsRefsTable($_db));
-    return ProcessedTableManager(
-      manager.$state.copyWith(prefetchedData: cache),
-    );
-  }
-}
 
 class $$AccountsTableFilterComposer
     extends Composer<_$AppDatabase, $AccountsTable> {
@@ -2017,30 +2167,11 @@ class $$AccountsTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  Expression<bool> transactionsRefs(
-    Expression<bool> Function($$TransactionsTableFilterComposer f) f,
-  ) {
-    final $$TransactionsTableFilterComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transactions,
-      getReferencedColumn: (t) => t.accountId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransactionsTableFilterComposer(
-            $db: $db,
-            $table: $db.transactions,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
+  ColumnWithTypeConverterFilters<AccountKind, AccountKind, int> get kind =>
+      $composableBuilder(
+        column: $table.kind,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
 }
 
 class $$AccountsTableOrderingComposer
@@ -2086,6 +2217,11 @@ class $$AccountsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$AccountsTableAnnotationComposer
@@ -2120,30 +2256,8 @@ class $$AccountsTableAnnotationComposer
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
-  Expression<T> transactionsRefs<T extends Object>(
-    Expression<T> Function($$TransactionsTableAnnotationComposer a) f,
-  ) {
-    final $$TransactionsTableAnnotationComposer composer = $composerBuilder(
-      composer: this,
-      getCurrentColumn: (t) => t.id,
-      referencedTable: $db.transactions,
-      getReferencedColumn: (t) => t.accountId,
-      builder:
-          (
-            joinBuilder, {
-            $addJoinBuilderToRootComposer,
-            $removeJoinBuilderFromRootComposer,
-          }) => $$TransactionsTableAnnotationComposer(
-            $db: $db,
-            $table: $db.transactions,
-            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
-            joinBuilder: joinBuilder,
-            $removeJoinBuilderFromRootComposer:
-                $removeJoinBuilderFromRootComposer,
-          ),
-    );
-    return f(composer);
-  }
+  GeneratedColumnWithTypeConverter<AccountKind, int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
 }
 
 class $$AccountsTableTableManager
@@ -2157,9 +2271,12 @@ class $$AccountsTableTableManager
           $$AccountsTableAnnotationComposer,
           $$AccountsTableCreateCompanionBuilder,
           $$AccountsTableUpdateCompanionBuilder,
-          (AccountEntity, $$AccountsTableReferences),
+          (
+            AccountEntity,
+            BaseReferences<_$AppDatabase, $AccountsTable, AccountEntity>,
+          ),
           AccountEntity,
-          PrefetchHooks Function({bool transactionsRefs})
+          PrefetchHooks Function()
         > {
   $$AccountsTableTableManager(_$AppDatabase db, $AccountsTable table)
     : super(
@@ -2181,6 +2298,7 @@ class $$AccountsTableTableManager
                 Value<int> initialBalanceCents = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<AccountKind> kind = const Value.absent(),
               }) => AccountsCompanion(
                 id: id,
                 name: name,
@@ -2189,6 +2307,7 @@ class $$AccountsTableTableManager
                 initialBalanceCents: initialBalanceCents,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                kind: kind,
               ),
           createCompanionCallback:
               ({
@@ -2199,6 +2318,7 @@ class $$AccountsTableTableManager
                 Value<int> initialBalanceCents = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<AccountKind> kind = const Value.absent(),
               }) => AccountsCompanion.insert(
                 id: id,
                 name: name,
@@ -2207,45 +2327,21 @@ class $$AccountsTableTableManager
                 initialBalanceCents: initialBalanceCents,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                kind: kind,
               ),
           withReferenceMapper: (p0) => p0
               .map(
                 (e) => (
                   e.readTable<$AccountsTable, AccountEntity>(table),
-                  $$AccountsTableReferences(db, table, e),
+                  BaseReferences<_$AppDatabase, $AccountsTable, AccountEntity>(
+                    db,
+                    table,
+                    e,
+                  ),
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({transactionsRefs = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [if (transactionsRefs) db.transactions],
-              addJoins: null,
-              getPrefetchedDataCallback: (items) async {
-                return [
-                  if (transactionsRefs)
-                    await $_getPrefetchedDataByColumns<
-                      AccountEntity,
-                      $AccountsTable,
-                      TransactionEntity,
-                      $TransactionsTable
-                    >(
-                      currentTable: table,
-                      referencedTable: $$AccountsTableReferences
-                          ._transactionsRefsTable(db),
-                      managerFromTypedResult: (p0) => $$AccountsTableReferences(
-                        db,
-                        table,
-                        p0,
-                      ).transactionsRefs,
-                      currentColumn: 'id',
-                      referencedColumn: 'account_id',
-                      typedResults: items,
-                    ),
-                ];
-              },
-            );
-          },
+          prefetchHooksCallback: null,
         ),
       );
 }
@@ -2260,9 +2356,12 @@ typedef $$AccountsTableProcessedTableManager =
       $$AccountsTableAnnotationComposer,
       $$AccountsTableCreateCompanionBuilder,
       $$AccountsTableUpdateCompanionBuilder,
-      (AccountEntity, $$AccountsTableReferences),
+      (
+        AccountEntity,
+        BaseReferences<_$AppDatabase, $AccountsTable, AccountEntity>,
+      ),
       AccountEntity,
-      PrefetchHooks Function({bool transactionsRefs})
+      PrefetchHooks Function()
     >;
 typedef $$CategoriesTableCreateCompanionBuilder = CategoriesCompanion Function({
   Value<int> id,
@@ -2604,6 +2703,8 @@ typedef $$TransactionsTableCreateCompanionBuilder =
       required int amountCents,
       required int categoryId,
       required int accountId,
+      Value<int?> voucherAccountId,
+      Value<int> voucherCents,
       required DateTime date,
       Value<String> note,
       Value<DateTime> createdAt,
@@ -2615,6 +2716,8 @@ typedef $$TransactionsTableUpdateCompanionBuilder =
       Value<int> amountCents,
       Value<int> categoryId,
       Value<int> accountId,
+      Value<int?> voucherAccountId,
+      Value<int> voucherCents,
       Value<DateTime> date,
       Value<String> note,
       Value<DateTime> createdAt,
@@ -2658,6 +2761,23 @@ final class $$TransactionsTableReferences
       manager.$state.copyWith(prefetchedData: [item]),
     );
   }
+
+  static $AccountsTable _voucherAccountIdTable(_$AppDatabase db) =>
+      db.accounts.createAlias('transactions__voucher_account_id__accounts__id');
+
+  $$AccountsTableProcessedTableManager? get voucherAccountId {
+    final $_column = $_itemColumn<int>('voucher_account_id');
+    if ($_column == null) return null;
+    final manager = $$AccountsTableTableManager(
+      $_db,
+      $_db.accounts,
+    ).filter((f) => f.id.sqlEquals($_column));
+    final item = $_typedResult.readTableOrNull(_voucherAccountIdTable($_db));
+    if (item == null) return manager;
+    return ProcessedTableManager(
+      manager.$state.copyWith(prefetchedData: [item]),
+    );
+  }
 }
 
 class $$TransactionsTableFilterComposer
@@ -2682,6 +2802,11 @@ class $$TransactionsTableFilterComposer
 
   ColumnFilters<int> get amountCents => $composableBuilder(
     column: $table.amountCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get voucherCents => $composableBuilder(
+    column: $table.voucherCents,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2745,6 +2870,29 @@ class $$TransactionsTableFilterComposer
     );
     return composer;
   }
+
+  $$AccountsTableFilterComposer get voucherAccountId {
+    final $$AccountsTableFilterComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableFilterComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableOrderingComposer
@@ -2768,6 +2916,11 @@ class $$TransactionsTableOrderingComposer
 
   ColumnOrderings<int> get amountCents => $composableBuilder(
     column: $table.amountCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get voucherCents => $composableBuilder(
+    column: $table.voucherCents,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -2831,6 +2984,29 @@ class $$TransactionsTableOrderingComposer
     );
     return composer;
   }
+
+  $$AccountsTableOrderingComposer get voucherAccountId {
+    final $$AccountsTableOrderingComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableOrderingComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableAnnotationComposer
@@ -2850,6 +3026,11 @@ class $$TransactionsTableAnnotationComposer
 
   GeneratedColumn<int> get amountCents => $composableBuilder(
     column: $table.amountCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get voucherCents => $composableBuilder(
+    column: $table.voucherCents,
     builder: (column) => column,
   );
 
@@ -2907,6 +3088,29 @@ class $$TransactionsTableAnnotationComposer
     );
     return composer;
   }
+
+  $$AccountsTableAnnotationComposer get voucherAccountId {
+    final $$AccountsTableAnnotationComposer composer = $composerBuilder(
+      composer: this,
+      getCurrentColumn: (t) => t.voucherAccountId,
+      referencedTable: $db.accounts,
+      getReferencedColumn: (t) => t.id,
+      builder:
+          (
+            joinBuilder, {
+            $addJoinBuilderToRootComposer,
+            $removeJoinBuilderFromRootComposer,
+          }) => $$AccountsTableAnnotationComposer(
+            $db: $db,
+            $table: $db.accounts,
+            $addJoinBuilderToRootComposer: $addJoinBuilderToRootComposer,
+            joinBuilder: joinBuilder,
+            $removeJoinBuilderFromRootComposer:
+                $removeJoinBuilderFromRootComposer,
+          ),
+    );
+    return composer;
+  }
 }
 
 class $$TransactionsTableTableManager
@@ -2922,7 +3126,11 @@ class $$TransactionsTableTableManager
           $$TransactionsTableUpdateCompanionBuilder,
           (TransactionEntity, $$TransactionsTableReferences),
           TransactionEntity,
-          PrefetchHooks Function({bool categoryId, bool accountId})
+          PrefetchHooks Function({
+            bool categoryId,
+            bool accountId,
+            bool voucherAccountId,
+          })
         > {
   $$TransactionsTableTableManager(_$AppDatabase db, $TransactionsTable table)
     : super(
@@ -2942,6 +3150,8 @@ class $$TransactionsTableTableManager
                 Value<int> amountCents = const Value.absent(),
                 Value<int> categoryId = const Value.absent(),
                 Value<int> accountId = const Value.absent(),
+                Value<int?> voucherAccountId = const Value.absent(),
+                Value<int> voucherCents = const Value.absent(),
                 Value<DateTime> date = const Value.absent(),
                 Value<String> note = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -2951,6 +3161,8 @@ class $$TransactionsTableTableManager
                 amountCents: amountCents,
                 categoryId: categoryId,
                 accountId: accountId,
+                voucherAccountId: voucherAccountId,
+                voucherCents: voucherCents,
                 date: date,
                 note: note,
                 createdAt: createdAt,
@@ -2962,6 +3174,8 @@ class $$TransactionsTableTableManager
                 required int amountCents,
                 required int categoryId,
                 required int accountId,
+                Value<int?> voucherAccountId = const Value.absent(),
+                Value<int> voucherCents = const Value.absent(),
                 required DateTime date,
                 Value<String> note = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -2971,6 +3185,8 @@ class $$TransactionsTableTableManager
                 amountCents: amountCents,
                 categoryId: categoryId,
                 accountId: accountId,
+                voucherAccountId: voucherAccountId,
+                voucherCents: voucherCents,
                 date: date,
                 note: note,
                 createdAt: createdAt,
@@ -2983,56 +3199,72 @@ class $$TransactionsTableTableManager
                 ),
               )
               .toList(),
-          prefetchHooksCallback: ({categoryId = false, accountId = false}) {
-            return PrefetchHooks(
-              db: db,
-              explicitlyWatchedTables: [],
-              addJoins:
-                  <
-                    T extends TableManagerState<
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic,
-                      dynamic
-                    >
-                  >(state) {
-                    if (categoryId) {
-                      state = state.withJoin(
-                        currentTable: table,
-                        currentColumn: table.categoryId,
-                        referencedTable: $$TransactionsTableReferences
-                            ._categoryIdTable(db),
-                        referencedColumn: $$TransactionsTableReferences
-                            ._categoryIdTable(db)
-                            .id,
-                      ) as T;
-                    }
-                    if (accountId) {
-                      state = state.withJoin(
-                        currentTable: table,
-                        currentColumn: table.accountId,
-                        referencedTable: $$TransactionsTableReferences
-                            ._accountIdTable(db),
-                        referencedColumn: $$TransactionsTableReferences
-                            ._accountIdTable(db)
-                            .id,
-                      ) as T;
-                    }
+          prefetchHooksCallback:
+              ({
+                categoryId = false,
+                accountId = false,
+                voucherAccountId = false,
+              }) {
+                return PrefetchHooks(
+                  db: db,
+                  explicitlyWatchedTables: [],
+                  addJoins:
+                      <
+                        T extends TableManagerState<
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic,
+                          dynamic
+                        >
+                      >(state) {
+                        if (categoryId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.categoryId,
+                            referencedTable: $$TransactionsTableReferences
+                                ._categoryIdTable(db),
+                            referencedColumn: $$TransactionsTableReferences
+                                ._categoryIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (accountId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.accountId,
+                            referencedTable: $$TransactionsTableReferences
+                                ._accountIdTable(db),
+                            referencedColumn: $$TransactionsTableReferences
+                                ._accountIdTable(db)
+                                .id,
+                          ) as T;
+                        }
+                        if (voucherAccountId) {
+                          state = state.withJoin(
+                            currentTable: table,
+                            currentColumn: table.voucherAccountId,
+                            referencedTable: $$TransactionsTableReferences
+                                ._voucherAccountIdTable(db),
+                            referencedColumn: $$TransactionsTableReferences
+                                ._voucherAccountIdTable(db)
+                                .id,
+                          ) as T;
+                        }
 
-                    return state;
+                        return state;
+                      },
+                  getPrefetchedDataCallback: (items) async {
+                    return [];
                   },
-              getPrefetchedDataCallback: (items) async {
-                return [];
+                );
               },
-            );
-          },
         ),
       );
 }
@@ -3049,7 +3281,11 @@ typedef $$TransactionsTableProcessedTableManager =
       $$TransactionsTableUpdateCompanionBuilder,
       (TransactionEntity, $$TransactionsTableReferences),
       TransactionEntity,
-      PrefetchHooks Function({bool categoryId, bool accountId})
+      PrefetchHooks Function({
+        bool categoryId,
+        bool accountId,
+        bool voucherAccountId,
+      })
     >;
 typedef $$TransfersTableCreateCompanionBuilder = TransfersCompanion Function({
   Value<int> id,

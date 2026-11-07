@@ -78,7 +78,7 @@ class CsvReportBuilder {
       rows.add([
         'Spesa più alta (€)',
         _money(biggest.tx.amountCents),
-        '${biggest.title} (${biggest.category.name}, ${biggest.account.name}) del ${formatDate(biggest.tx.date)}',
+        '${biggest.title} (${biggest.category.name}, ${biggest.accountLabel}) del ${formatDate(biggest.tx.date)}',
       ]);
     }
     final top = s.expenseByCategory.firstOrNull;
@@ -214,7 +214,7 @@ class CsvReportBuilder {
         formatWeekday(t.tx.date),
         t.isIncome ? 'Entrata' : 'Uscita',
         _text(t.category.name),
-        _text(t.account.name),
+        _text(_accountWithShares(t)),
         _text(t.tx.note),
         t.isIncome ? _money(t.tx.amountCents) : '',
         t.isIncome ? '' : _money(t.tx.amountCents),
@@ -241,7 +241,9 @@ class CsvReportBuilder {
   /// Tabella semplice, una riga per movimento: ideale per filtri e tabelle
   /// pivot. L'importo ha il segno (negativo = uscita). Ogni trasferimento
   /// diventa due righe (uscita dal conto di origine, entrata in quello di
-  /// destinazione), così i totali per conto tornano.
+  /// destinazione) e così una spesa pagata in parte con i buoni pasto (una
+  /// riga per conto con la sua parte): i totali per conto e per categoria
+  /// tornano.
   String buildTransactionsTable(ReportData data) {
     final rows = <List<Object?>>[
       ['Data', 'Tipo', 'Categoria', 'Conto', 'Descrizione', 'Importo (€)'],
@@ -250,14 +252,18 @@ class CsvReportBuilder {
     for (final m in movements) {
       switch (m) {
         case TransactionWithCategory t:
-          rows.add([
-            formatDate(t.tx.date),
-            t.isIncome ? 'Entrata' : 'Uscita',
-            _text(t.category.name),
-            _text(t.account.name),
-            _text(t.tx.note),
-            _money(t.signedCents),
-          ]);
+          for (final account in [t.account, ?t.voucherAccount]) {
+            final cents = t.signedCentsFor(account.id);
+            if (cents == 0 && account != t.account) continue;
+            rows.add([
+              formatDate(t.tx.date),
+              t.isIncome ? 'Entrata' : 'Uscita',
+              _text(t.category.name),
+              _text(account.name),
+              _text(t.tx.note),
+              _money(cents),
+            ]);
+          }
         case TransferWithAccounts t:
           final note = t.transfer.note.trim().isEmpty
               ? '${t.from.name} → ${t.to.name}'
@@ -325,6 +331,13 @@ class CsvReportBuilder {
   }
 
   String _money(int cents) => _amount.format(cents / 100);
+
+  /// "Conto principale" oppure, per una spesa pagata in parte con i buoni,
+  /// "Conto principale 40,00 € + Buoni pasto 140,00 €".
+  String _accountWithShares(TransactionWithCategory t) => t.usesVouchers
+      ? '${t.account.name} ${_money(t.accountCents)} € + '
+          '${t.voucherAccount!.name} ${_money(t.voucherCents)} €'
+      : t.account.name;
 
   /// Evita che testi liberi vengano interpretati come formule dal foglio
   /// di calcolo (CSV injection).

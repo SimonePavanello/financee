@@ -20,6 +20,13 @@ class DefaultAccount {
 /// Conto creato al primo avvio (e in migrazione, per i movimenti esistenti).
 const kDefaultAccount = DefaultAccount('Conto principale', 'bank', 0xFF6366F1);
 
+/// Conto creato attivando i buoni pasto nelle impostazioni.
+const kMealVoucherAccount = DefaultAccount('Buoni pasto', 'ticket', 0xFFF97316);
+
+/// Categoria di entrata per i buoni ricevuti (creata quando serve).
+const kMealVoucherCategory =
+    DefaultCategory('Buoni pasto', TxType.income, 'ticket', 0xFFF97316);
+
 /// Categorie create al primo avvio. L'utente può modificarle o eliminarle.
 const kDefaultCategories = <DefaultCategory>[
   // Uscite

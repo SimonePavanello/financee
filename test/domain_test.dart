@@ -3,6 +3,7 @@ import 'package:financiee/core/utils/period.dart';
 import 'package:financiee/data/app_database.dart';
 import 'package:financiee/data/models.dart';
 import 'package:financiee/domain/analytics.dart';
+import 'package:financiee/domain/meal_vouchers.dart';
 import 'package:financiee/features/reports/csv_report_builder.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
@@ -29,10 +30,12 @@ AccountEntity _acc(int id, String name, [int initial = 0]) => AccountEntity(
       initialBalanceCents: initial,
       sortOrder: id,
       createdAt: DateTime(2026),
+      kind: AccountKind.standard,
     );
 
 final _main = _acc(1, 'Conto principale', 50000);
 final _savings = _acc(2, 'Risparmi', 100000);
+final _vouchers = _acc(3, 'Buoni pasto', 16000);
 
 final _spesa = _cat(1, 'Spesa', TxType.expense);
 final _casa = _cat(2, 'Casa', TxType.expense);
@@ -54,6 +57,7 @@ TransactionWithCategory _tx(
       amountCents: cents,
       categoryId: c.id,
       accountId: a.id,
+      voucherCents: 0,
       date: date,
       note: note,
       createdAt: date,
@@ -62,6 +66,33 @@ TransactionWithCategory _tx(
     a,
   );
 }
+
+/// Spesa pagata in parte con i buoni: [voucherCents] dal conto dei buoni,
+/// il resto da [_main].
+TransactionWithCategory _split(
+  CategoryEntity c,
+  int cents,
+  int voucherCents,
+  DateTime date, [
+  String note = '',
+]) =>
+    TransactionWithCategory(
+      TransactionEntity(
+        id: _nextId++,
+        type: c.type,
+        amountCents: cents,
+        categoryId: c.id,
+        accountId: _main.id,
+        voucherAccountId: _vouchers.id,
+        voucherCents: voucherCents,
+        date: date,
+        note: note,
+        createdAt: date,
+      ),
+      c,
+      _main,
+      _vouchers,
+    );
 
 TransferWithAccounts _transfer(
   AccountEntity from,
@@ -262,6 +293,111 @@ void main() {
     test('nome del file', () {
       expect(reportFileName(period, full: true), 'report_finanze_2026-11.csv');
       expect(reportFileName(period, full: false), 'movimenti_2026-11.csv');
+    });
+  });
+
+  group('Buoni pasto', () {
+    test('ripartizione canonica tra conto scelto e conto dei buoni', () {
+      expect(
+        normalizeVoucherSplit(amountCents: 18000, accountId: 1, voucherAccountId: 3, voucherCents: 14000),
+        (accountId: 1, voucherAccountId: 3, voucherCents: 14000),
+      );
+      // Nessun buono, o buoni dallo stesso conto: spesa normale.
+      expect(
+        normalizeVoucherSplit(amountCents: 18000, accountId: 1, voucherAccountId: 3),
+        (accountId: 1, voucherAccountId: null, voucherCents: 0),
+      );
+      expect(
+        normalizeVoucherSplit(amountCents: 18000, accountId: 3, voucherAccountId: 3, voucherCents: 800),
+        (accountId: 3, voucherAccountId: null, voucherCents: 0),
+      );
+      // I buoni coprono tutto: la spesa va interamente sul conto dei buoni.
+      expect(
+        normalizeVoucherSplit(amountCents: 1600, accountId: 1, voucherAccountId: 3, voucherCents: 1600),
+        (accountId: 3, voucherAccountId: null, voucherCents: 0),
+      );
+    });
+
+    test('conteggio dei buoni e proposta per una spesa', () {
+      expect(formatVoucherCount(800, 800), '1 buono');
+      expect(formatVoucherCount(13600, 800), '17 buoni');
+      expect(formatVoucherCount(14000, 800), '17,5 buoni');
+      expect(formatVoucherCount(0, 800), '0 buoni');
+      // 180 € di spesa, buoni da 8 €: al massimo 22 buoni (176 €)...
+      expect(suggestedVoucherCents(amountCents: 18000, valueCents: 800, availableCents: 100000), 17600);
+      // ...ma non più di quelli disponibili.
+      expect(suggestedVoucherCents(amountCents: 18000, valueCents: 800, availableCents: 4000), 4000);
+      // Senza importo o con buoni esauriti si parte da un buono.
+      expect(suggestedVoucherCents(amountCents: 0, valueCents: 800, availableCents: 0), 800);
+      expect(addVoucher(13600, 800), 14400);
+      expect(addVoucher(14000, 800), 14400);
+      expect(removeVoucher(13600, 800), 12800);
+      expect(removeVoucher(14000, 800), 13600);
+      expect(removeVoucher(800, 800), 0);
+      expect(removeVoucher(0, 800), 0);
+    });
+
+    test('una spesa divisa pesa su ciascun conto solo per la sua parte', () {
+      final t = _split(_spesa, 18000, 14000, DateTime(2026, 11, 7), 'Spesa grande');
+      expect(t.usesVouchers, isTrue);
+      expect(t.accountCents, 4000);
+      expect(t.centsFor(null), 18000);
+      expect(t.signedCentsFor(_main.id), -4000);
+      expect(t.signedCentsFor(_vouchers.id), -14000);
+      expect(t.signedCentsFor(_savings.id), 0);
+      expect(t.involves(_vouchers.id), isTrue);
+      expect(t.involves(_savings.id), isFalse);
+      expect(t.accountLabel, 'Conto principale + Buoni pasto');
+    });
+
+    test('quota della categoria coperta dai buoni nel mese', () {
+      final s = PeriodSummary.from([
+        _split(_spesa, 18000, 14000, DateTime(2026, 11, 7)),
+        _tx(_spesa, 12000, DateTime(2026, 11, 12)),
+        _tx(_casa, 65000, DateTime(2026, 11, 3)),
+        _split(_casa, 5000, 1600, DateTime(2026, 11, 9)),
+      ]);
+      // "Hai speso 300 € di spesa, di cui 140 € in buoni pasto": 46,7%.
+      final spesa = s.expenseByCategory.firstWhere((c) => c.category.id == _spesa.id);
+      expect(spesa.totalCents, 30000);
+      expect(spesa.voucherCents, 14000);
+      expect(formatPercent(spesa.voucherShare), '46,7%');
+      expect(s.voucherCents, 15600);
+      // Dalla categoria più coperta dai buoni; senza buoni non compare.
+      expect(s.voucherCategories.map((c) => c.category.name), ['Spesa', 'Casa']);
+      expect(PeriodSummary.from([_tx(_spesa, 1000, DateTime(2026, 11, 1))])
+          .voucherCategories, isEmpty);
+    });
+
+    test('report e CSV: categoria per intero, conti per la loro parte', () {
+      final items = [
+        _split(_spesa, 18000, 14000, DateTime(2026, 11, 7), 'Spesa grande'),
+        _tx(_stipendio, 200000, DateTime(2026, 11, 1)),
+      ];
+      final data = ReportData.compute(
+        Period.month(DateTime(2026, 11)),
+        items,
+        accounts: [_main, _vouchers],
+        startBalances: {_main.id: 50000, _vouchers.id: 16000},
+        now: DateTime(2026, 11, 30),
+      );
+      expect(data.summary.expenseCents, 18000);
+      expect(data.summary.expenseByCategory.single.totalCents, 18000);
+      expect(data.summary.expenseByCategory.single.count, 1);
+      final main = data.accounts.firstWhere((a) => a.account.id == _main.id);
+      final vouchers = data.accounts.firstWhere((a) => a.account.id == _vouchers.id);
+      expect(main.expenseCents, 4000);
+      expect(main.endCents, 50000 + 200000 - 4000);
+      expect(vouchers.expenseCents, 14000);
+      expect(vouchers.endCents, 2000);
+
+      final builder = CsvReportBuilder(generatedAt: DateTime(2026, 11, 30));
+      final full = builder.buildFullReport(data);
+      expect(full, contains('Conto principale 40,00 € + Buoni pasto 140,00 €;Spesa grande;;180,00;'));
+      expect(full, contains('Buoni pasto;160,00;0,00;140,00;0,00;20,00;-140,00'));
+      final table = builder.buildTransactionsTable(data);
+      expect(table, contains('07/11/2026;Uscita;Spesa;Conto principale;Spesa grande;-40,00'));
+      expect(table, contains('07/11/2026;Uscita;Spesa;Buoni pasto;Spesa grande;-140,00'));
     });
   });
 }

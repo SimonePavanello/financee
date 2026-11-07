@@ -247,10 +247,218 @@ void main() {
     await migrated.close();
     await dir.delete(recursive: true);
   });
+  group('buoni pasto', () {
+    test('attivarli crea il conto e la categoria, una volta sola', () async {
+      final id = await db.enableMealVouchers();
+      expect(await db.enableMealVouchers(), id);
+      final accounts = await db.getAccounts();
+      expect(accounts, hasLength(2));
+      final vouchers = accounts.firstWhere((a) => a.id == id);
+      expect(vouchers.name, 'Buoni pasto');
+      expect(vouchers.kind, AccountKind.mealVoucher);
+      final cats = (await db.getCategories())
+          .where((c) => c.name == 'Buoni pasto')
+          .toList();
+      expect(cats.single.type, TxType.income);
+    });
+
+    test('riusa un conto "Buoni pasto" esistente e ne tiene uno solo', () async {
+      final existing = await db.createAccount(
+        name: 'buoni pasto',
+        iconKey: 'ticket',
+        color: 0xFFF97316,
+      );
+      expect(await db.enableMealVouchers(), existing);
+      final main = (await db.getAccounts()).firstWhere((a) => a.id != existing);
+      await db.setMealVoucherAccount(main.id);
+      final kinds = {for (final a in await db.getAccounts()) a.id: a.kind};
+      expect(kinds[main.id], AccountKind.mealVoucher);
+      expect(kinds[existing], AccountKind.standard);
+      await db.setMealVoucherAccount(null);
+      expect(
+        (await db.getAccounts()).every((a) => a.kind == AccountKind.standard),
+        isTrue,
+      );
+    });
+
+    test('spesa da 180 €: 140 € in buoni e 40 € dal conto principale', () async {
+      final main = (await db.getAccounts()).single.id;
+      final vouchers = await db.enableMealVouchers();
+      await db.addTransaction(
+        type: TxType.income,
+        amountCents: 16000, // 20 buoni da 8 €
+        categoryId: await db.ensureMealVoucherCategory(),
+        accountId: vouchers,
+        date: DateTime(2026, 11, 2),
+      );
+      await db.addTransaction(
+        type: TxType.income,
+        amountCents: 100000,
+        categoryId: (await cat('Stipendio')).id,
+        accountId: main,
+        date: DateTime(2026, 11, 1),
+      );
+      final id = await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 18000,
+        categoryId: (await cat('Spesa')).id,
+        accountId: main,
+        voucherAccountId: vouchers,
+        voucherCents: 14000,
+        date: DateTime(2026, 11, 7),
+        note: 'Spesa grande',
+      );
+
+      final balances = await db.watchAccountBalances().first;
+      expect(balances[main], 100000 - 4000);
+      expect(balances[vouchers], 16000 - 14000);
+      final before =
+          await db.watchAccountBalances(before: DateTime(2026, 11, 7)).first;
+      expect(before[vouchers], 16000);
+      expect(await db.countAccountUsage(vouchers), 2);
+      expect(await db.countAccountUsage(main), 2);
+
+      final txs = await db
+          .watchTransactionsBetween(DateTime(2026, 11), DateTime(2026, 12))
+          .first;
+      final split = txs.firstWhere((t) => t.tx.id == id);
+      expect(split.voucherAccount?.id, vouchers);
+      expect(split.accountCents, 4000);
+      expect(
+        txs.where((t) => t.tx.id != id).every((t) => !t.usesVouchers),
+        isTrue,
+      );
+
+      // Modificandola in modo che i buoni coprano tutto, la spesa passa
+      // interamente sul conto dei buoni.
+      await db.updateTransaction(split.tx.copyWith(voucherCents: 18000));
+      final full = (await db
+              .watchTransactionsBetween(DateTime(2026, 11), DateTime(2026, 12))
+              .first)
+          .firstWhere((t) => t.tx.id == id);
+      expect(full.account.id, vouchers);
+      expect(full.usesVouchers, isFalse);
+      final after = await db.watchAccountBalances().first;
+      expect(after[main], 100000);
+      expect(after[vouchers], 16000 - 18000);
+    });
+
+    test('un\'entrata non può essere divisa con i buoni', () async {
+      final main = (await db.getAccounts()).single.id;
+      final vouchers = await db.enableMealVouchers();
+      await db.addTransaction(
+        type: TxType.income,
+        amountCents: 5000,
+        categoryId: (await cat('Rimborsi')).id,
+        accountId: main,
+        voucherAccountId: vouchers,
+        voucherCents: 800,
+        date: DateTime(2026, 11, 3),
+      );
+      final balances = await db.watchAccountBalances().first;
+      expect(balances[main], 5000);
+      expect(balances[vouchers], 0);
+    });
+
+    test('unendo il conto dei buoni al principale la spesa torna normale', () async {
+      final main = (await db.getAccounts()).single.id;
+      final vouchers = await db.enableMealVouchers();
+      final card = await db.createAccount(
+        name: 'Carta',
+        iconKey: 'card',
+        color: 0xFF0EA5E9,
+      );
+      await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 18000,
+        categoryId: (await cat('Spesa')).id,
+        accountId: main,
+        voucherAccountId: vouchers,
+        voucherCents: 14000,
+        date: DateTime(2026, 11, 7),
+      );
+      await db.addTransaction(
+        type: TxType.expense,
+        amountCents: 3000,
+        categoryId: (await cat('Ristoranti e bar')).id,
+        accountId: card,
+        voucherAccountId: vouchers,
+        voucherCents: 1600,
+        date: DateTime(2026, 11, 8),
+      );
+      final before = await db.watchAccountBalances().first;
+
+      await db.deleteAccount(vouchers, mergeInto: main);
+
+      final after = await db.watchAccountBalances().first;
+      expect(after[main], before[main]! + before[vouchers]!);
+      expect(after[card], before[card]);
+      final txs = await db
+          .watchTransactionsBetween(DateTime(2000), DateTime(2100))
+          .first;
+      final grocery = txs.firstWhere((t) => t.tx.amountCents == 18000);
+      expect(grocery.usesVouchers, isFalse);
+      expect(grocery.tx.voucherAccountId, isNull);
+      final dinner = txs.firstWhere((t) => t.tx.amountCents == 3000);
+      expect(dinner.voucherAccount?.id, main);
+      expect(dinner.voucherCents, 1600);
+    });
+  });
+
+  test('migrazione v2 -> v3: conti e movimenti restano, buoni a zero', () async {
+    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final file = File('${dir.path}/v2.sqlite');
+    final raw = sqlite3.open(file.path);
+    raw.execute(_schemaV2);
+    raw.execute(
+      "INSERT INTO categories (id, name, type, icon_key, color) "
+      "VALUES (1, 'Spesa', 0, 'cart', 4280401502)",
+    );
+    raw.execute(
+      "INSERT INTO accounts (id, name, icon_key, color, initial_balance_cents) "
+      "VALUES (1, 'Conto principale', 'bank', 4284703473, 10000), "
+      "(2, 'Buoni pasto', 'wallet', 4294538774, 16000)",
+    );
+    raw.execute(
+      "INSERT INTO transactions "
+      "(type, amount_cents, category_id, account_id, date, note) "
+      "VALUES (0, 4520, 1, 1, 1793833200, 'Esselunga'), "
+      "(0, 800, 1, 2, 1793919600, '')",
+    );
+    raw.execute('PRAGMA user_version = 2');
+    raw.close();
+
+    final migrated = AppDatabase(NativeDatabase(file));
+    final accounts = await migrated.getAccounts();
+    expect(accounts.map((a) => a.name), ['Conto principale', 'Buoni pasto']);
+    expect(accounts.every((a) => a.kind == AccountKind.standard), isTrue);
+    final txs = await migrated
+        .watchTransactionsBetween(DateTime(2000), DateTime(2100))
+        .first;
+    expect(txs, hasLength(2));
+    expect(txs.every((t) => !t.usesVouchers && t.tx.voucherCents == 0), isTrue);
+    final balances = await migrated.watchAccountBalances().first;
+    expect(balances[1], 10000 - 4520);
+    expect(balances[2], 16000 - 800);
+    // Il conto "Buoni pasto" già esistente diventa quello dei buoni.
+    expect(await migrated.enableMealVouchers(), 2);
+    await migrated.close();
+    await dir.delete(recursive: true);
+  });
 }
 
 const _schemaV1 = '''
 CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 CREATE INDEX transactions_date_idx ON transactions (date);
+''';
+
+const _schemaV2 = '''
+CREATE TABLE "accounts" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "initial_balance_cents" INTEGER NOT NULL DEFAULT 0, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "categories" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "name" TEXT NOT NULL, "type" INTEGER NOT NULL, "icon_key" TEXT NOT NULL, "color" INTEGER NOT NULL, "sort_order" INTEGER NOT NULL DEFAULT 0, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transactions" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "type" INTEGER NOT NULL, "amount_cents" INTEGER NOT NULL, "category_id" INTEGER NOT NULL REFERENCES categories (id), "account_id" INTEGER NOT NULL REFERENCES accounts (id), "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from_account_id" INTEGER NOT NULL REFERENCES accounts (id), "to_account_id" INTEGER NOT NULL REFERENCES accounts (id), "amount_cents" INTEGER NOT NULL, "date" INTEGER NOT NULL, "note" TEXT NOT NULL DEFAULT '', "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
+CREATE INDEX transactions_date_idx ON transactions (date);
+CREATE INDEX transactions_account_idx ON transactions (account_id);
+CREATE INDEX transfers_date_idx ON transfers (date);
 ''';

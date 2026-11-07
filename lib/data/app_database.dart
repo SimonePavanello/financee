@@ -9,6 +9,15 @@ part 'app_database.g.dart';
 /// Tipo di movimento. L'ordine è salvato nel DB: aggiungere solo in coda.
 enum TxType { expense, income }
 
+/// Tipo di conto. L'ordine è salvato nel DB: aggiungere solo in coda.
+enum AccountKind {
+  standard,
+
+  /// Conto dei buoni pasto: al massimo uno. Le spese possono essere pagate
+  /// in parte con questo conto (vedi [Transactions.voucherCents]).
+  mealVoucher,
+}
+
 @DataClassName('AccountEntity')
 class Accounts extends Table {
   IntColumn get id => integer().autoIncrement()();
@@ -24,6 +33,8 @@ class Accounts extends Table {
       integer().withDefault(const Constant(0))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get kind => intEnum<AccountKind>()
+      .withDefault(Constant(AccountKind.standard.index))();
 }
 
 @DataClassName('CategoryEntity')
@@ -46,15 +57,55 @@ class Transactions extends Table {
   IntColumn get id => integer().autoIncrement()();
   IntColumn get type => intEnum<TxType>()();
 
-  /// Importo sempre positivo, in centesimi (evita gli errori dei double).
+  /// Importo totale, sempre positivo, in centesimi (evita gli errori dei
+  /// double). Se c'è una parte pagata con i buoni pasto, è compresa qui.
   IntColumn get amountCents => integer()();
   IntColumn get categoryId => integer().references(Categories, #id)();
+
+  /// Conto da cui esce (o in cui entra) l'importo, esclusa l'eventuale
+  /// parte pagata con i buoni pasto.
   IntColumn get accountId => integer().references(Accounts, #id)();
+
+  /// Conto dei buoni pasto usati per pagare una parte della spesa
+  /// ([voucherCents]). Nullo se la spesa è pagata tutta con [accountId].
+  IntColumn get voucherAccountId =>
+      integer().nullable().references(Accounts, #id)();
+
+  /// Parte di [amountCents] pagata con i buoni pasto: 0 se non ci sono buoni,
+  /// altrimenti tra 0 e [amountCents] esclusi (vedi [normalizeVoucherSplit]).
+  IntColumn get voucherCents => integer().withDefault(const Constant(0))();
 
   /// Giorno del movimento (mezzanotte, ora locale).
   DateTimeColumn get date => dateTime()();
   TextColumn get note => text().withDefault(const Constant(''))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+}
+
+/// Ripartizione di una spesa tra il conto scelto e il conto dei buoni pasto.
+typedef VoucherSplit = ({int accountId, int? voucherAccountId, int voucherCents});
+
+/// Riporta la ripartizione in forma canonica:
+/// - nessun buono (o buoni dallo stesso conto) → spesa normale;
+/// - buoni che coprono tutto l'importo → spesa intera sul conto dei buoni.
+VoucherSplit normalizeVoucherSplit({
+  required int amountCents,
+  required int accountId,
+  int? voucherAccountId,
+  int voucherCents = 0,
+}) {
+  if (voucherAccountId == null ||
+      voucherCents <= 0 ||
+      voucherAccountId == accountId) {
+    return (accountId: accountId, voucherAccountId: null, voucherCents: 0);
+  }
+  if (voucherCents >= amountCents) {
+    return (accountId: voucherAccountId, voucherAccountId: null, voucherCents: 0);
+  }
+  return (
+    accountId: accountId,
+    voucherAccountId: voucherAccountId,
+    voucherCents: voucherCents,
+  );
 }
 
 /// Spostamento di denaro tra due conti: non è né un'entrata né una spesa.
@@ -80,8 +131,9 @@ class AppDatabase extends _$AppDatabase {
 
   /// v1: categorie e movimenti.
   /// v2: conti (ogni movimento appartiene a un conto) e trasferimenti.
+  /// v3: buoni pasto (tipo di conto e parte di una spesa pagata con i buoni).
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -103,10 +155,21 @@ class AppDatabase extends _$AppDatabase {
                 columnTransformer: {
                   transactions.accountId: Constant(defaultId),
                 },
-                newColumns: [transactions.accountId],
+                newColumns: [
+                  transactions.accountId,
+                  transactions.voucherAccountId,
+                  transactions.voucherCents,
+                ],
               ),
             );
             await m.createIndex(transactionsAccountIdx);
+          }
+          // Da v1 i passi qui sopra creano già tabelle e colonne con lo schema
+          // attuale (buoni compresi); da v2 vanno aggiunte le colonne nuove.
+          if (from == 2) {
+            await m.addColumn(accounts, accounts.kind);
+            await m.addColumn(transactions, transactions.voucherAccountId);
+            await m.addColumn(transactions, transactions.voucherCents);
           }
         },
         beforeOpen: (details) async {
@@ -160,6 +223,7 @@ class AppDatabase extends _$AppDatabase {
     required String iconKey,
     required int color,
     int initialBalanceCents = 0,
+    AccountKind kind = AccountKind.standard,
   }) async {
     final maxOrder = accounts.sortOrder.max();
     final current = await (selectOnly(accounts)..addColumns([maxOrder]))
@@ -172,6 +236,7 @@ class AppDatabase extends _$AppDatabase {
         color: color,
         initialBalanceCents: Value(initialBalanceCents),
         sortOrder: Value((current ?? -1) + 1),
+        kind: Value(kind),
       ),
     );
   }
@@ -179,8 +244,60 @@ class AppDatabase extends _$AppDatabase {
   Future<bool> updateAccount(AccountEntity account) =>
       update(accounts).replace(account);
 
+  /// Imposta [accountId] come conto dei buoni pasto (al massimo uno: gli
+  /// altri tornano conti normali). Con `null` nessun conto è dei buoni.
+  Future<void> setMealVoucherAccount(int? accountId) => transaction(() async {
+        await (update(accounts)
+              ..where((a) => a.kind.equalsValue(AccountKind.mealVoucher)))
+            .write(AccountsCompanion(kind: Value(AccountKind.standard)));
+        if (accountId != null) {
+          await (update(accounts)..where((a) => a.id.equals(accountId)))
+              .write(AccountsCompanion(kind: Value(AccountKind.mealVoucher)));
+        }
+      });
+
+  /// Attiva i buoni pasto: il conto "Buoni pasto" diventa il conto dei buoni
+  /// (creandolo se non c'è) e si prepara la categoria per i buoni ricevuti.
+  /// Restituisce l'id del conto.
+  Future<int> enableMealVouchers() => transaction(() async {
+        final name = kMealVoucherAccount.name.toLowerCase();
+        final existing = (await getAccounts())
+            .where((a) => a.name.trim().toLowerCase() == name)
+            .firstOrNull;
+        final id = existing?.id ??
+            await createAccount(
+              name: kMealVoucherAccount.name,
+              iconKey: kMealVoucherAccount.iconKey,
+              color: kMealVoucherAccount.color,
+            );
+        await setMealVoucherAccount(id);
+        await ensureMealVoucherCategory();
+        return id;
+      });
+
+  /// Categoria di entrata con cui si registrano i buoni ricevuti; la crea
+  /// se non esiste. Restituisce il suo id.
+  Future<int> ensureMealVoucherCategory() async {
+    final existing = await (select(categories)
+          ..where(
+            (c) =>
+                c.type.equalsValue(TxType.income) &
+                c.name.lower().equals(kMealVoucherCategory.name.toLowerCase()),
+          ))
+        .get();
+    if (existing.isNotEmpty) return existing.first.id;
+    return createCategory(
+      name: kMealVoucherCategory.name,
+      type: TxType.income,
+      iconKey: kMealVoucherCategory.iconKey,
+      color: kMealVoucherCategory.color,
+    );
+  }
+
   /// Saldo di ogni conto (id conto -> centesimi), considerando solo i
-  /// movimenti con data precedente a [before] se indicata.
+  /// movimenti con data precedente a [before] se indicata. Di una spesa
+  /// pagata in parte con i buoni, il conto scelto perde solo la parte non
+  /// coperta dai buoni e il conto dei buoni perde il resto.
   Stream<Map<int, int>> watchAccountBalances({DateTime? before}) {
     final dateFilter = before == null ? '' : 'AND x.date < ?1';
     final variables = [
@@ -191,8 +308,13 @@ class AppDatabase extends _$AppDatabase {
       SELECT a.id AS id,
         a.initial_balance_cents
         + COALESCE((SELECT SUM(CASE WHEN x.type = ${TxType.income.index}
-                                    THEN x.amount_cents ELSE -x.amount_cents END)
+                                    THEN x.amount_cents - x.voucher_cents
+                                    ELSE x.voucher_cents - x.amount_cents END)
                     FROM transactions x WHERE x.account_id = a.id $dateFilter), 0)
+        + COALESCE((SELECT SUM(CASE WHEN x.type = ${TxType.income.index}
+                                    THEN x.voucher_cents ELSE -x.voucher_cents END)
+                    FROM transactions x
+                    WHERE x.voucher_account_id = a.id $dateFilter), 0)
         + COALESCE((SELECT SUM(x.amount_cents) FROM transfers x
                     WHERE x.to_account_id = a.id $dateFilter), 0)
         - COALESCE((SELECT SUM(x.amount_cents) FROM transfers x
@@ -212,7 +334,8 @@ class AppDatabase extends _$AppDatabase {
   Stream<Map<int, int>> watchAccountUsage() => customSelect(
         '''
         SELECT a.id AS id,
-          (SELECT COUNT(*) FROM transactions x WHERE x.account_id = a.id)
+          (SELECT COUNT(*) FROM transactions x
+           WHERE x.account_id = a.id OR x.voucher_account_id = a.id)
           + (SELECT COUNT(*) FROM transfers x
              WHERE x.from_account_id = a.id OR x.to_account_id = a.id) AS n
         FROM accounts a
@@ -247,6 +370,18 @@ class AppDatabase extends _$AppDatabase {
           await (update(transactions)
                 ..where((t) => t.accountId.equals(accountId)))
               .write(TransactionsCompanion(accountId: Value(mergeInto)));
+          await (update(transactions)
+                ..where((t) => t.voucherAccountId.equals(accountId)))
+              .write(TransactionsCompanion(voucherAccountId: Value(mergeInto)));
+          // Una spesa divisa tra i due conti uniti torna una spesa normale.
+          await (update(transactions)
+                ..where((t) => t.voucherAccountId.equalsExp(t.accountId)))
+              .write(
+            const TransactionsCompanion(
+              voucherAccountId: Value(null),
+              voucherCents: Value(0),
+            ),
+          );
           await (delete(transfers)
                 ..where(
                   (t) =>
@@ -346,9 +481,11 @@ class AppDatabase extends _$AppDatabase {
     DateTime start,
     DateTime end,
   ) {
+    final voucher = alias(accounts, 'voucher_account');
     final query = select(transactions).join([
       innerJoin(categories, categories.id.equalsExp(transactions.categoryId)),
       innerJoin(accounts, accounts.id.equalsExp(transactions.accountId)),
+      leftOuterJoin(voucher, voucher.id.equalsExp(transactions.voucherAccountId)),
     ])
       ..where(
         transactions.date.isBiggerOrEqualValue(start) &
@@ -366,6 +503,7 @@ class AppDatabase extends _$AppDatabase {
                 row.readTable(transactions),
                 row.readTable(categories),
                 row.readTable(accounts),
+                row.readTableOrNull(voucher),
               ),
           ],
         );
@@ -378,6 +516,9 @@ class AppDatabase extends _$AppDatabase {
         .watchSingle();
   }
 
+  /// Aggiunge un movimento. Per una spesa pagata in parte con i buoni pasto,
+  /// [voucherCents] (compresi in [amountCents]) escono da [voucherAccountId]
+  /// e il resto da [accountId].
   Future<int> addTransaction({
     required TxType type,
     required int amountCents,
@@ -385,20 +526,46 @@ class AppDatabase extends _$AppDatabase {
     required int accountId,
     required DateTime date,
     String note = '',
-  }) =>
-      into(transactions).insert(
-        TransactionsCompanion.insert(
-          type: type,
-          amountCents: amountCents,
-          categoryId: categoryId,
-          accountId: accountId,
-          date: _day(date),
-          note: Value(note),
-        ),
-      );
+    int? voucherAccountId,
+    int voucherCents = 0,
+  }) {
+    final split = normalizeVoucherSplit(
+      amountCents: amountCents,
+      accountId: accountId,
+      voucherAccountId: type == TxType.expense ? voucherAccountId : null,
+      voucherCents: voucherCents,
+    );
+    return into(transactions).insert(
+      TransactionsCompanion.insert(
+        type: type,
+        amountCents: amountCents,
+        categoryId: categoryId,
+        accountId: split.accountId,
+        voucherAccountId: Value(split.voucherAccountId),
+        voucherCents: Value(split.voucherCents),
+        date: _day(date),
+        note: Value(note),
+      ),
+    );
+  }
 
-  Future<bool> updateTransaction(TransactionEntity tx) =>
-      update(transactions).replace(tx.copyWith(date: _day(tx.date)));
+  Future<bool> updateTransaction(TransactionEntity tx) {
+    final split = normalizeVoucherSplit(
+      amountCents: tx.amountCents,
+      accountId: tx.accountId,
+      voucherAccountId:
+          tx.type == TxType.expense ? tx.voucherAccountId : null,
+      voucherCents: tx.voucherCents,
+    );
+    return update(transactions).replace(
+      tx.copyWith(
+        date: _day(tx.date),
+        accountId: split.accountId,
+        voucherAccountId: Value(split.voucherAccountId),
+        voucherCents: split.voucherCents,
+      ),
+    );
+  }
 
   Future<int> deleteTransaction(int id) =>
       (delete(transactions)..where((t) => t.id.equals(id))).go();

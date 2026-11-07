@@ -8,6 +8,7 @@ import 'data/app_database.dart';
 import 'data/connection.dart';
 import 'data/models.dart';
 import 'domain/analytics.dart';
+import 'domain/meal_vouchers.dart';
 
 // -----------------------------------------------------------------------------
 // Infrastruttura
@@ -100,6 +101,39 @@ final accountBalancesProvider = StreamProvider<Map<int, int>>(
 /// Numero di movimenti e trasferimenti per conto.
 final accountUsageProvider = StreamProvider<Map<int, int>>(
   (ref) => ref.watch(databaseProvider).watchAccountUsage(),
+);
+
+// -----------------------------------------------------------------------------
+// Buoni pasto
+// -----------------------------------------------------------------------------
+
+/// Valore di un buono pasto in centesimi (impostazione, predefinito 8 €).
+class MealVoucherValueNotifier extends Notifier<int> {
+  static const _key = 'meal_voucher_value_cents';
+
+  @override
+  int build() =>
+      ref.watch(sharedPreferencesProvider).getInt(_key) ??
+      kDefaultMealVoucherValueCents;
+
+  void set(int cents) {
+    if (cents <= 0) return;
+    state = cents;
+    ref.read(sharedPreferencesProvider).setInt(_key, cents);
+  }
+}
+
+final mealVoucherValueProvider =
+    NotifierProvider<MealVoucherValueNotifier, int>(MealVoucherValueNotifier.new);
+
+/// Il conto dei buoni pasto, se è stato attivato nelle impostazioni.
+final mealVoucherAccountProvider = Provider<AccountEntity?>(
+  (ref) => ref
+      .watch(accountsProvider)
+      .asData
+      ?.value
+      .where((a) => a.kind == AccountKind.mealVoucher)
+      .firstOrNull,
 );
 
 /// Conto su cui è filtrata la lista movimenti (`null` = tutti).

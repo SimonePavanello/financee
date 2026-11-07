@@ -14,12 +14,24 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 - **Trasferimenti tra conti**: es. 100 € da "Risparmi" a "Conto principale"
   con descrizione e data. Non contano né come entrate né come spese, ma
   aggiornano i saldi dei due conti.
+- **Buoni pasto** (Impostazioni → Buoni pasto): imposti quanto vale un buono
+  (es. 8 €) e attivi il conto "Buoni pasto", su cui carichi i buoni ricevuti
+  ("Aggiungi buoni ricevuti", anche dalla scheda Conti) come entrata della
+  categoria Buoni pasto. In una spesa puoi pagare una parte con i buoni:
+  scegli quanti buoni usi (− / +, oppure "Usa il massimo") e il form mostra
+  quanto esce da ciascun conto. Es. spesa di 180 € con 17 buoni da 8 €:
+  136 € dal conto Buoni pasto e 44 € dal conto scelto. Nei report la spesa
+  conta per intero nella sua categoria e ogni conto solo per la sua parte; il
+  saldo del conto dei buoni si vede anche come numero di buoni. In dashboard
+  la card "Buoni pasto" riassume il mese per categoria ("Spesa: hai speso
+  300,00 € di cui 140,00 € in buoni pasto"); toccando una riga si apre la
+  percentuale coperta dai buoni (46,7%) con la barra e i due importi.
 - **Movimenti**: inserimento rapido di entrate, spese e trasferimenti (importo,
   conto, categoria, data, descrizione), lista raggruppata per giorno con
   totale giornaliero, ricerca, filtri Entrate/Uscite/Trasferimenti e per conto
   con i totali del risultato, modifica e cancellazione con swipe e "Annulla".
 - **Categorie**: 19 categorie predefinite in italiano, creazione e modifica con
-  nome, colore (18) e icona (50). Se elimini una categoria che ha movimenti,
+  nome, colore (18) e icona (51). Se elimini una categoria che ha movimenti,
   l'app ti chiede in quale categoria spostarli: nessun dato va perso.
 - **Dashboard** (per mese): saldo con gradiente animato, entrate/uscite, tasso di
   risparmio, variazione delle spese rispetto al mese precedente, media
@@ -36,7 +48,8 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
     con conto, colonne Entrata/Uscita separate e saldo progressivo.
   - *Solo movimenti*: una riga per movimento con conto e importo con segno, per
     filtri e tabelle pivot; ogni trasferimento diventa due righe (uscita dal
-    conto di origine, entrata in quello di destinazione).
+    conto di origine, entrata in quello di destinazione), e così una spesa
+    pagata in parte con i buoni pasto (una riga per conto con la sua parte).
   - Separatore `;`, decimali con la virgola, date `gg/mm/aaaa`, UTF-8 con BOM
     (accenti ed € corretti in Excel), protezione dalle formule nei testi.
   - Sul web il file si scarica; su Android si apre il menu di condivisione
@@ -68,10 +81,13 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 
 Gli importi sono salvati in **centesimi interi** (niente errori di arrotondamento).
 
-Schema del database (versione 2): `accounts`, `categories`, `transactions`
-(entrate/uscite, ciascuna con conto e categoria), `transfers` (da conto → a
-conto). L'aggiornamento dalla versione 1 è automatico: i movimenti già
-registrati finiscono in "Conto principale" (coperto da un test di migrazione).
+Schema del database (versione 3): `accounts` (con il tipo: normale o buoni
+pasto), `categories`, `transactions` (entrate/uscite, ciascuna con conto e
+categoria; una spesa può avere una parte `voucher_cents` pagata dal conto dei
+buoni `voucher_account_id`), `transfers` (da conto → a conto).
+L'aggiornamento dalle versioni precedenti è automatico (coperto da test di
+migrazione): dalla 1 i movimenti già registrati finiscono in "Conto
+principale"; dalla 2 conti e movimenti restano com'erano, senza buoni.
 
 ## Struttura
 
