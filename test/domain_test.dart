@@ -412,7 +412,74 @@ void main() {
           color: 0xFFF43F5E,
           sortOrder: id,
           createdAt: DateTime(2026, 9, 1),
+          kind: DebtKind.amount,
+          paidInstallments: 0,
         );
+
+    // Prestito auto: 60 rate da 250 € (15.000 €), 12 già pagate.
+    DebtEntity rateDebt({int rate = 25000, int count = 60, int before = 12}) =>
+        DebtEntity(
+          id: 9,
+          name: 'Prestito auto',
+          amountCents: rate * count,
+          iconKey: 'car',
+          color: 0xFF6366F1,
+          sortOrder: 9,
+          createdAt: DateTime(2026, 9, 1),
+          kind: DebtKind.installments,
+          installmentCents: rate,
+          installmentCount: count,
+          paidInstallments: before,
+        );
+
+    test('a rate: rate già pagate, pagamenti collegati e residuo', () {
+      final fresh = DebtSummary(debt: rateDebt());
+      expect(fresh.isInstallments, isTrue);
+      expect(fresh.amountCents, 1500000);
+      expect(fresh.priorPaidCents, 300000);
+      expect(fresh.repaidCents, 300000);
+      expect(fresh.remainingCents, 1200000);
+      expect(fresh.progress, closeTo(0.2, 1e-9));
+      expect(fresh.paidInstallments, 12);
+      expect(fresh.remainingInstallments, 48);
+      expect(installmentsLabel(fresh), '12 rate su 60 pagate');
+
+      // Due rate pagate nell'app: 14 su 60.
+      final two = DebtSummary(debt: rateDebt(), paidCents: 50000, paymentCount: 2);
+      expect(two.paidInstallments, 14);
+      expect(two.remainingCents, 1150000);
+      // Una rata pagata con qualche centesimo in meno conta comunque.
+      final almost = DebtSummary(debt: rateDebt(), paidCents: 24990);
+      expect(almost.paidInstallments, 13);
+      // Metà rata non basta.
+      final half = DebtSummary(debt: rateDebt(), paidCents: 12500);
+      expect(half.paidInstallments, 12);
+      // Estinzione anticipata: un unico pagamento del residuo.
+      final early = DebtSummary(debt: rateDebt(), paidCents: 1200000, paymentCount: 1);
+      expect(early.isPaidOff, isTrue);
+      expect(early.paidInstallments, 60);
+      expect(early.remainingInstallments, 0);
+    });
+
+    test('a rate: anteprima di un pagamento, anche modificandolo', () {
+      final d = DebtSummary(debt: rateDebt(), paidCents: 50000, paymentCount: 2);
+      final next = d.afterPayment(25000);
+      expect(next.paidInstallments, 15);
+      expect(next.remainingCents, 1125000);
+      expect(installmentsLabel(next), '15 rate su 60 pagate');
+      // Modificando una rata già registrata da 250 € a 500 €.
+      expect(d.afterPayment(50000, alreadyLinkedCents: 25000).paidInstallments, 15);
+      expect(remainingAfterPayment(d, 25000), 1125000);
+      // Tutte le rate pagate prima di usare l'app: già estinto.
+      final done = DebtSummary(debt: rateDebt(count: 3, before: 3));
+      expect(done.isPaidOff, isTrue);
+      expect(installmentsLabel(DebtSummary(debt: rateDebt(count: 3, before: 1))), '1 rata su 3 pagata');
+      // Un debito a importo non ha rate.
+      final plain = DebtSummary(debt: debt(1, 'Klarna', 30000));
+      expect(plain.isInstallments, isFalse);
+      expect(plain.paidInstallments, 0);
+      expect(plain.priorPaidCents, 0);
+    });
 
     test('residuo, avanzamento ed estinzione', () {
       final auto = DebtSummary(debt: debt(1, 'Auto', 500000), paidCents: 180000, paymentCount: 9);

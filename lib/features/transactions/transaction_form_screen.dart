@@ -166,6 +166,11 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
     } else {
       _accountId = widget.initialAccountId;
       _debtId = widget.initialDebtId;
+      // Pagamento di un debito a rate: l'importo proposto è la rata.
+      final debt = (ref.read(debtsProvider).asData?.value ?? const [])
+          .where((d) => d.id == _debtId)
+          .firstOrNull;
+      if (debt != null && debt.isInstallments) amount = debt.installmentCents;
     }
 
     _amount = TextEditingController(text: amount == 0 ? '' : centsToInput(amount));
@@ -376,11 +381,14 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
     final already = tx != null && !tx.isIncome && tx.tx.debtId == debt.id
         ? tx.tx.amountCents
         : 0;
-    final after = remainingAfterPayment(debt, cents, alreadyLinkedCents: already);
+    final after = debt.afterPayment(cents, alreadyLinkedCents: already);
     final style = Theme.of(context).textTheme.bodySmall;
+    final muted = style?.copyWith(
+      color: Theme.of(context).colorScheme.onSurfaceVariant,
+    );
     return Padding(
       padding: const EdgeInsets.only(top: 10),
-      child: after == 0
+      child: after.isPaidOff
           ? Row(
               children: [
                 const Icon(
@@ -400,15 +408,33 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
                 ),
               ],
             )
+          : after.isInstallments
+          ? SensitiveText(
+              visibleText: 'Dopo questo pagamento: ${installmentsLabel(after)}, '
+                  'restano ${formatMoney(after.remainingCents)}',
+              hiddenText: 'Dopo questo pagamento: ${installmentsLabel(after)}',
+              style: muted,
+            )
           : SensitiveText(
-              visibleText: 'Dopo questo pagamento restano ${formatMoney(after)} '
+              visibleText: 'Dopo questo pagamento restano '
+                  '${formatMoney(after.remainingCents)} '
                   'su ${formatMoney(debt.amountCents)}',
               hiddenText: 'Dopo questo pagamento restano $kHiddenAmount',
-              style: style?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
-              ),
+              style: muted,
             ),
     );
+  }
+
+  /// Scegliendo un debito a rate con l'importo ancora vuoto, propone la rata.
+  void _selectDebt(List<DebtSummary> debts, int? id) {
+    _debtId = id;
+    final debt = debts.where((d) => d.id == id).firstOrNull;
+    if (debt != null &&
+        debt.isInstallments &&
+        (parseAmountToCents(_amount.text) ?? 0) == 0) {
+      _amount.text = centsToInput(debt.installmentCents);
+      _amountError = null;
+    }
   }
 
   String get _title {
@@ -562,10 +588,15 @@ class _MovementFormScreenState extends ConsumerState<MovementFormScreen> {
                     DebtPicker(
                       debts: debts,
                       selectedId: _debtId,
-                      onSelected: (id) => setState(() => _debtId = id),
+                      onSelected: (id) =>
+                          setState(() => _selectDebt(debts, id)),
                       onCreate: () async {
                         final id = await showDebtEditor(context);
-                        if (id != null) setState(() => _debtId = id);
+                        if (id == null || !mounted) return;
+                        // Il nuovo debito arriva dal database poco dopo.
+                        final all =
+                            await ref.read(debtsProvider.future);
+                        if (mounted) setState(() => _selectDebt(all, id));
                       },
                     ),
                     ?_debtHint(debts),

@@ -26,10 +26,21 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   la card "Buoni pasto" riassume il mese per categoria ("Spesa: hai speso
   300,00 € di cui 140,00 € in buoni pasto"); toccando una riga si apre la
   percentuale coperta dai buoni (46,7%) con la barra e i due importi.
-- **Debiti** (scheda Conti → Debiti): crei un debito con nome, importo da
-  restituire, icona e colore (es. "Prestito auto" 5.000 €). Nel form di una
-  spesa scegli "Pagamento di un debito" e il form dice quanto resterà dopo
-  quel pagamento. Ogni debito mostra quanto resta, la percentuale restituita
+- **Debiti** (scheda Conti → Debiti), in due modalità:
+  - *Importo totale*, per gli acquisti divisi in poche rate (PayPal in 3
+    rate, Klarna) o per soldi da restituire a qualcuno: nome e importo da
+    restituire (es. "Klarna divano" 600 €).
+  - *A rate*, per prestiti e finanziamenti: importo della rata, numero di
+    rate e rate già pagate prima di registrarle qui (es. "Prestito auto",
+    60 rate da 250 € di cui 12 già pagate: restano 12.000 € in 48 rate).
+    Gli interessi non si calcolano: il totale è rata × numero di rate.
+
+  Nel form di una spesa scegli "Pagamento di un debito" e il form dice quanto
+  resterà dopo quel pagamento (per un debito a rate propone la rata come
+  importo e dice a che rata sei, es. "15 rate su 60 pagate"). Le rate si
+  contano dall'importo restituito: due rate pagate insieme contano due, e
+  un'estinzione anticipata chiude il debito. Ogni debito mostra quanto resta,
+  la percentuale restituita
   e una barra che si riempie fino a "Estinto"; toccandolo si apre il
   dettaglio con l'andamento del residuo nel tempo e tutti i pagamenti
   collegati (da cui puoi anche registrarne uno nuovo). In dashboard compaiono
@@ -113,15 +124,16 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 
 Gli importi sono salvati in **centesimi interi** (niente errori di arrotondamento).
 
-Schema del database (versione 5): `accounts` (con il tipo: normale o buoni
-pasto), `categories`, `debts` (debiti con l'importo da restituire),
+Schema del database (versione 6): `accounts` (con il tipo: normale o buoni
+pasto), `categories`, `debts` (debiti a importo totale o a rate: rata,
+numero di rate e rate già pagate; `amount_cents` è sempre il totale),
 `transactions` (entrate/uscite, ciascuna con conto e categoria; una spesa può
 avere una parte `voucher_cents` pagata dal conto dei buoni
 `voucher_account_id` ed essere il pagamento di un debito `debt_id`),
 `transfers` (da conto → a conto), `savings_goals` (obiettivo di un conto:
 saldo da raggiungere e scadenza facoltativa). L'aggiornamento dalle versioni
 precedenti è automatico (coperto da test di migrazione): dalla 1 i movimenti
-già registrati finiscono in "Conto principale"; dalla 2, 3 e 4 conti e
+già registrati finiscono in "Conto principale"; dalla 2, 3, 4 e 5 conti e
 movimenti restano com'erano, senza buoni, debiti o obiettivi.
 
 Il database si chiama `financee` (file `financee.sqlite` su Android/iOS,

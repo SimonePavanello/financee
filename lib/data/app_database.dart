@@ -50,6 +50,18 @@ class Categories extends Table {
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
 }
 
+/// Tipo di debito. L'ordine è salvato nel DB: aggiungere solo in coda.
+enum DebtKind {
+  /// Un importo totale (es. PayPal in 3 rate, Klarna): ogni spesa collegata
+  /// lo riduce.
+  amount,
+
+  /// Un finanziamento a rate (es. prestito auto): importo della rata, numero
+  /// di rate e rate già pagate prima di registrarle nell'app. Niente
+  /// interessi: il totale è rata × numero di rate.
+  installments,
+}
+
 /// Debito da restituire (prestito, finanziamento, soldi chiesti a qualcuno).
 /// Le spese collegate ([Transactions.debtId]) sono i pagamenti che lo
 /// riducono, fino a estinguerlo.
@@ -58,7 +70,8 @@ class Debts extends Table {
   IntColumn get id => integer().autoIncrement()();
   TextColumn get name => text().withLength(min: 1, max: 40)();
 
-  /// Importo da restituire, sempre positivo, in centesimi.
+  /// Importo da restituire, sempre positivo, in centesimi. Per i debiti a
+  /// rate è rata × numero di rate.
   IntColumn get amountCents => integer()();
   TextColumn get iconKey => text()();
 
@@ -66,7 +79,32 @@ class Debts extends Table {
   IntColumn get color => integer()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime().withDefault(currentDateAndTime)();
+  IntColumn get kind =>
+      intEnum<DebtKind>().withDefault(Constant(DebtKind.amount.index))();
+
+  /// Solo per i debiti a rate: importo di una rata, in centesimi.
+  IntColumn get installmentCents => integer().nullable()();
+
+  /// Solo per i debiti a rate: numero totale di rate.
+  IntColumn get installmentCount => integer().nullable()();
+
+  /// Solo per i debiti a rate: rate già pagate prima di registrarle
+  /// nell'app (contano come restituite).
+  IntColumn get paidInstallments => integer().withDefault(const Constant(0))();
 }
+
+/// Totale di un debito: per quelli a rate è rata × numero di rate.
+int debtTotalCents({
+  required DebtKind kind,
+  required int amountCents,
+  int? installmentCents,
+  int? installmentCount,
+}) =>
+    kind == DebtKind.installments &&
+            installmentCents != null &&
+            installmentCount != null
+        ? installmentCents * installmentCount
+        : amountCents;
 
 /// Pagamenti di un debito: totale restituito, numero di pagamenti e data
 /// dell'ultimo.
@@ -182,8 +220,9 @@ class AppDatabase extends _$AppDatabase {
   /// v3: buoni pasto (tipo di conto e parte di una spesa pagata con i buoni).
   /// v4: debiti (le spese possono essere collegate a un debito).
   /// v5: obiettivi di risparmio sui conti.
+  /// v6: debiti a rate (rata, numero di rate, rate già pagate).
   @override
-  int get schemaVersion => 5;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -227,6 +266,12 @@ class AppDatabase extends _$AppDatabase {
           }
           if (from == 2 || from == 3) {
             await m.addColumn(transactions, transactions.debtId);
+          }
+          if (from == 4 || from == 5) {
+            await m.addColumn(debts, debts.kind);
+            await m.addColumn(debts, debts.installmentCents);
+            await m.addColumn(debts, debts.installmentCount);
+            await m.addColumn(debts, debts.paidInstallments);
           }
           if (from < 5) await m.createTable(savingsGoals);
         },
@@ -564,12 +609,19 @@ class AppDatabase extends _$AppDatabase {
         ]))
       .get();
 
+  /// Crea un debito. Per un debito a rate ([DebtKind.installments]) il
+  /// totale è calcolato da rata e numero di rate.
   Future<int> createDebt({
     required String name,
     required int amountCents,
     required String iconKey,
     required int color,
+    DebtKind kind = DebtKind.amount,
+    int? installmentCents,
+    int? installmentCount,
+    int paidInstallments = 0,
   }) async {
+    final installments = kind == DebtKind.installments;
     final maxOrder = debts.sortOrder.max();
     final current = await (selectOnly(debts)..addColumns([maxOrder]))
         .map((r) => r.read(maxOrder))
@@ -577,15 +629,41 @@ class AppDatabase extends _$AppDatabase {
     return into(debts).insert(
       DebtsCompanion.insert(
         name: name,
-        amountCents: amountCents,
+        amountCents: debtTotalCents(
+          kind: kind,
+          amountCents: amountCents,
+          installmentCents: installmentCents,
+          installmentCount: installmentCount,
+        ),
         iconKey: iconKey,
         color: color,
         sortOrder: Value((current ?? -1) + 1),
+        kind: Value(kind),
+        installmentCents: Value(installments ? installmentCents : null),
+        installmentCount: Value(installments ? installmentCount : null),
+        paidInstallments: Value(installments ? paidInstallments : 0),
       ),
     );
   }
 
-  Future<bool> updateDebt(DebtEntity debt) => update(debts).replace(debt);
+  /// Aggiorna un debito, ricalcolando il totale di quelli a rate (e
+  /// azzerando i campi delle rate per quelli a importo totale).
+  Future<bool> updateDebt(DebtEntity debt) {
+    final installments = debt.kind == DebtKind.installments;
+    return update(debts).replace(
+      debt.copyWith(
+        amountCents: debtTotalCents(
+          kind: debt.kind,
+          amountCents: debt.amountCents,
+          installmentCents: debt.installmentCents,
+          installmentCount: debt.installmentCount,
+        ),
+        installmentCents: Value(installments ? debt.installmentCents : null),
+        installmentCount: Value(installments ? debt.installmentCount : null),
+        paidInstallments: installments ? debt.paidInstallments : 0,
+      ),
+    );
+  }
 
   /// Elimina un debito: le spese collegate restano, senza debito.
   Future<void> deleteDebt(int debtId) => transaction(() async {

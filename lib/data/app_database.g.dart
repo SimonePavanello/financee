@@ -1049,6 +1049,50 @@ class $DebtsTable extends Debts with TableInfo<$DebtsTable, DebtEntity> {
     defaultValue: currentDateAndTime,
   );
   @override
+  late final GeneratedColumnWithTypeConverter<DebtKind, int> kind =
+      GeneratedColumn<int>(
+        'kind',
+        aliasedName,
+        false,
+        type: DriftSqlType.int,
+        requiredDuringInsert: false,
+        defaultValue: Constant(DebtKind.amount.index),
+      ).withConverter<DebtKind>($DebtsTable.$converterkind);
+  static const VerificationMeta _installmentCentsMeta = const VerificationMeta(
+    'installmentCents',
+  );
+  @override
+  late final GeneratedColumn<int> installmentCents = GeneratedColumn<int>(
+    'installment_cents',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _installmentCountMeta = const VerificationMeta(
+    'installmentCount',
+  );
+  @override
+  late final GeneratedColumn<int> installmentCount = GeneratedColumn<int>(
+    'installment_count',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _paidInstallmentsMeta = const VerificationMeta(
+    'paidInstallments',
+  );
+  @override
+  late final GeneratedColumn<int> paidInstallments = GeneratedColumn<int>(
+    'paid_installments',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(0),
+  );
+  @override
   List<GeneratedColumn> get $columns => [
     id,
     name,
@@ -1057,6 +1101,10 @@ class $DebtsTable extends Debts with TableInfo<$DebtsTable, DebtEntity> {
     color,
     sortOrder,
     createdAt,
+    kind,
+    installmentCents,
+    installmentCount,
+    paidInstallments,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1120,6 +1168,33 @@ class $DebtsTable extends Debts with TableInfo<$DebtsTable, DebtEntity> {
         createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
       );
     }
+    if (data.containsKey('installment_cents')) {
+      context.handle(
+        _installmentCentsMeta,
+        installmentCents.isAcceptableOrUnknown(
+          data['installment_cents']!,
+          _installmentCentsMeta,
+        ),
+      );
+    }
+    if (data.containsKey('installment_count')) {
+      context.handle(
+        _installmentCountMeta,
+        installmentCount.isAcceptableOrUnknown(
+          data['installment_count']!,
+          _installmentCountMeta,
+        ),
+      );
+    }
+    if (data.containsKey('paid_installments')) {
+      context.handle(
+        _paidInstallmentsMeta,
+        paidInstallments.isAcceptableOrUnknown(
+          data['paid_installments']!,
+          _paidInstallmentsMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -1157,6 +1232,24 @@ class $DebtsTable extends Debts with TableInfo<$DebtsTable, DebtEntity> {
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
       )!,
+      kind: $DebtsTable.$converterkind.fromSql(
+        attachedDatabase.typeMapping.read(
+          DriftSqlType.int,
+          data['${effectivePrefix}kind'],
+        )!,
+      ),
+      installmentCents: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}installment_cents'],
+      ),
+      installmentCount: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}installment_count'],
+      ),
+      paidInstallments: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}paid_installments'],
+      )!,
     );
   }
 
@@ -1164,13 +1257,17 @@ class $DebtsTable extends Debts with TableInfo<$DebtsTable, DebtEntity> {
   $DebtsTable createAlias(String alias) {
     return $DebtsTable(attachedDatabase, alias);
   }
+
+  static JsonTypeConverter2<DebtKind, int, int> $converterkind =
+      const EnumIndexConverter<DebtKind>(DebtKind.values);
 }
 
 class DebtEntity extends DataClass implements Insertable<DebtEntity> {
   final int id;
   final String name;
 
-  /// Importo da restituire, sempre positivo, in centesimi.
+  /// Importo da restituire, sempre positivo, in centesimi. Per i debiti a
+  /// rate è rata × numero di rate.
   final int amountCents;
   final String iconKey;
 
@@ -1178,6 +1275,17 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
   final int color;
   final int sortOrder;
   final DateTime createdAt;
+  final DebtKind kind;
+
+  /// Solo per i debiti a rate: importo di una rata, in centesimi.
+  final int? installmentCents;
+
+  /// Solo per i debiti a rate: numero totale di rate.
+  final int? installmentCount;
+
+  /// Solo per i debiti a rate: rate già pagate prima di registrarle
+  /// nell'app (contano come restituite).
+  final int paidInstallments;
   const DebtEntity({
     required this.id,
     required this.name,
@@ -1186,6 +1294,10 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
     required this.color,
     required this.sortOrder,
     required this.createdAt,
+    required this.kind,
+    this.installmentCents,
+    this.installmentCount,
+    required this.paidInstallments,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1197,6 +1309,16 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
     map['color'] = Variable<int>(color);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
+    {
+      map['kind'] = Variable<int>($DebtsTable.$converterkind.toSql(kind));
+    }
+    if (!nullToAbsent || installmentCents != null) {
+      map['installment_cents'] = Variable<int>(installmentCents);
+    }
+    if (!nullToAbsent || installmentCount != null) {
+      map['installment_count'] = Variable<int>(installmentCount);
+    }
+    map['paid_installments'] = Variable<int>(paidInstallments);
     return map;
   }
 
@@ -1209,6 +1331,14 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
       color: Value(color),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
+      kind: Value(kind),
+      installmentCents: installmentCents == null && nullToAbsent
+          ? const Value.absent()
+          : Value(installmentCents),
+      installmentCount: installmentCount == null && nullToAbsent
+          ? const Value.absent()
+          : Value(installmentCount),
+      paidInstallments: Value(paidInstallments),
     );
   }
 
@@ -1225,6 +1355,12 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
       color: serializer.fromJson<int>(json['color']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      kind: $DebtsTable.$converterkind.fromJson(
+        serializer.fromJson<int>(json['kind']),
+      ),
+      installmentCents: serializer.fromJson<int?>(json['installmentCents']),
+      installmentCount: serializer.fromJson<int?>(json['installmentCount']),
+      paidInstallments: serializer.fromJson<int>(json['paidInstallments']),
     );
   }
   @override
@@ -1238,6 +1374,10 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
       'color': serializer.toJson<int>(color),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
+      'kind': serializer.toJson<int>($DebtsTable.$converterkind.toJson(kind)),
+      'installmentCents': serializer.toJson<int?>(installmentCents),
+      'installmentCount': serializer.toJson<int?>(installmentCount),
+      'paidInstallments': serializer.toJson<int>(paidInstallments),
     };
   }
 
@@ -1249,6 +1389,10 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
     int? color,
     int? sortOrder,
     DateTime? createdAt,
+    DebtKind? kind,
+    Value<int?> installmentCents = const Value.absent(),
+    Value<int?> installmentCount = const Value.absent(),
+    int? paidInstallments,
   }) => DebtEntity(
     id: id ?? this.id,
     name: name ?? this.name,
@@ -1257,6 +1401,14 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
     color: color ?? this.color,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
+    kind: kind ?? this.kind,
+    installmentCents: installmentCents.present
+        ? installmentCents.value
+        : this.installmentCents,
+    installmentCount: installmentCount.present
+        ? installmentCount.value
+        : this.installmentCount,
+    paidInstallments: paidInstallments ?? this.paidInstallments,
   );
   DebtEntity copyWithCompanion(DebtsCompanion data) {
     return DebtEntity(
@@ -1269,6 +1421,16 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
       color: data.color.present ? data.color.value : this.color,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      kind: data.kind.present ? data.kind.value : this.kind,
+      installmentCents: data.installmentCents.present
+          ? data.installmentCents.value
+          : this.installmentCents,
+      installmentCount: data.installmentCount.present
+          ? data.installmentCount.value
+          : this.installmentCount,
+      paidInstallments: data.paidInstallments.present
+          ? data.paidInstallments.value
+          : this.paidInstallments,
     );
   }
 
@@ -1281,14 +1443,29 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
           ..write('iconKey: $iconKey, ')
           ..write('color: $color, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('kind: $kind, ')
+          ..write('installmentCents: $installmentCents, ')
+          ..write('installmentCount: $installmentCount, ')
+          ..write('paidInstallments: $paidInstallments')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, amountCents, iconKey, color, sortOrder, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    amountCents,
+    iconKey,
+    color,
+    sortOrder,
+    createdAt,
+    kind,
+    installmentCents,
+    installmentCount,
+    paidInstallments,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -1299,7 +1476,11 @@ class DebtEntity extends DataClass implements Insertable<DebtEntity> {
           other.iconKey == this.iconKey &&
           other.color == this.color &&
           other.sortOrder == this.sortOrder &&
-          other.createdAt == this.createdAt);
+          other.createdAt == this.createdAt &&
+          other.kind == this.kind &&
+          other.installmentCents == this.installmentCents &&
+          other.installmentCount == this.installmentCount &&
+          other.paidInstallments == this.paidInstallments);
 }
 
 class DebtsCompanion extends UpdateCompanion<DebtEntity> {
@@ -1310,6 +1491,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
   final Value<int> color;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
+  final Value<DebtKind> kind;
+  final Value<int?> installmentCents;
+  final Value<int?> installmentCount;
+  final Value<int> paidInstallments;
   const DebtsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
@@ -1318,6 +1503,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
     this.color = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.installmentCents = const Value.absent(),
+    this.installmentCount = const Value.absent(),
+    this.paidInstallments = const Value.absent(),
   });
   DebtsCompanion.insert({
     this.id = const Value.absent(),
@@ -1327,6 +1516,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
     required int color,
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
+    this.kind = const Value.absent(),
+    this.installmentCents = const Value.absent(),
+    this.installmentCount = const Value.absent(),
+    this.paidInstallments = const Value.absent(),
   }) : name = Value(name),
        amountCents = Value(amountCents),
        iconKey = Value(iconKey),
@@ -1339,6 +1532,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
     Expression<int>? color,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
+    Expression<int>? kind,
+    Expression<int>? installmentCents,
+    Expression<int>? installmentCount,
+    Expression<int>? paidInstallments,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1348,6 +1545,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
       if (color != null) 'color': color,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
+      if (kind != null) 'kind': kind,
+      if (installmentCents != null) 'installment_cents': installmentCents,
+      if (installmentCount != null) 'installment_count': installmentCount,
+      if (paidInstallments != null) 'paid_installments': paidInstallments,
     });
   }
 
@@ -1359,6 +1560,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
     Value<int>? color,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
+    Value<DebtKind>? kind,
+    Value<int?>? installmentCents,
+    Value<int?>? installmentCount,
+    Value<int>? paidInstallments,
   }) {
     return DebtsCompanion(
       id: id ?? this.id,
@@ -1368,6 +1573,10 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
       color: color ?? this.color,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
+      kind: kind ?? this.kind,
+      installmentCents: installmentCents ?? this.installmentCents,
+      installmentCount: installmentCount ?? this.installmentCount,
+      paidInstallments: paidInstallments ?? this.paidInstallments,
     );
   }
 
@@ -1395,6 +1604,18 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
+    if (kind.present) {
+      map['kind'] = Variable<int>($DebtsTable.$converterkind.toSql(kind.value));
+    }
+    if (installmentCents.present) {
+      map['installment_cents'] = Variable<int>(installmentCents.value);
+    }
+    if (installmentCount.present) {
+      map['installment_count'] = Variable<int>(installmentCount.value);
+    }
+    if (paidInstallments.present) {
+      map['paid_installments'] = Variable<int>(paidInstallments.value);
+    }
     return map;
   }
 
@@ -1407,7 +1628,11 @@ class DebtsCompanion extends UpdateCompanion<DebtEntity> {
           ..write('iconKey: $iconKey, ')
           ..write('color: $color, ')
           ..write('sortOrder: $sortOrder, ')
-          ..write('createdAt: $createdAt')
+          ..write('createdAt: $createdAt, ')
+          ..write('kind: $kind, ')
+          ..write('installmentCents: $installmentCents, ')
+          ..write('installmentCount: $installmentCount, ')
+          ..write('paidInstallments: $paidInstallments')
           ..write(')'))
         .toString();
   }
@@ -3719,6 +3944,10 @@ typedef $$DebtsTableCreateCompanionBuilder = DebtsCompanion Function({
   required int color,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
+  Value<DebtKind> kind,
+  Value<int?> installmentCents,
+  Value<int?> installmentCount,
+  Value<int> paidInstallments,
 });
 typedef $$DebtsTableUpdateCompanionBuilder = DebtsCompanion Function({
   Value<int> id,
@@ -3728,6 +3957,10 @@ typedef $$DebtsTableUpdateCompanionBuilder = DebtsCompanion Function({
   Value<int> color,
   Value<int> sortOrder,
   Value<DateTime> createdAt,
+  Value<DebtKind> kind,
+  Value<int?> installmentCents,
+  Value<int?> installmentCount,
+  Value<int> paidInstallments,
 });
 
 final class $$DebtsTableReferences
@@ -3793,6 +4026,27 @@ class $$DebtsTableFilterComposer extends Composer<_$AppDatabase, $DebtsTable> {
 
   ColumnFilters<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnWithTypeConverterFilters<DebtKind, DebtKind, int> get kind =>
+      $composableBuilder(
+        column: $table.kind,
+        builder: (column) => ColumnWithTypeConverterFilters(column),
+      );
+
+  ColumnFilters<int> get installmentCents => $composableBuilder(
+    column: $table.installmentCents,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get installmentCount => $composableBuilder(
+    column: $table.installmentCount,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get paidInstallments => $composableBuilder(
+    column: $table.paidInstallments,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3865,6 +4119,26 @@ class $$DebtsTableOrderingComposer
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<int> get kind => $composableBuilder(
+    column: $table.kind,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get installmentCents => $composableBuilder(
+    column: $table.installmentCents,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get installmentCount => $composableBuilder(
+    column: $table.installmentCount,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get paidInstallments => $composableBuilder(
+    column: $table.paidInstallments,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$DebtsTableAnnotationComposer
@@ -3898,6 +4172,24 @@ class $$DebtsTableAnnotationComposer
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumnWithTypeConverter<DebtKind, int> get kind =>
+      $composableBuilder(column: $table.kind, builder: (column) => column);
+
+  GeneratedColumn<int> get installmentCents => $composableBuilder(
+    column: $table.installmentCents,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get installmentCount => $composableBuilder(
+    column: $table.installmentCount,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get paidInstallments => $composableBuilder(
+    column: $table.paidInstallments,
+    builder: (column) => column,
+  );
 
   Expression<T> transactionsRefs<T extends Object>(
     Expression<T> Function($$TransactionsTableAnnotationComposer a) f,
@@ -3960,6 +4252,10 @@ class $$DebtsTableTableManager
                 Value<int> color = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DebtKind> kind = const Value.absent(),
+                Value<int?> installmentCents = const Value.absent(),
+                Value<int?> installmentCount = const Value.absent(),
+                Value<int> paidInstallments = const Value.absent(),
               }) => DebtsCompanion(
                 id: id,
                 name: name,
@@ -3968,6 +4264,10 @@ class $$DebtsTableTableManager
                 color: color,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                kind: kind,
+                installmentCents: installmentCents,
+                installmentCount: installmentCount,
+                paidInstallments: paidInstallments,
               ),
           createCompanionCallback:
               ({
@@ -3978,6 +4278,10 @@ class $$DebtsTableTableManager
                 required int color,
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
+                Value<DebtKind> kind = const Value.absent(),
+                Value<int?> installmentCents = const Value.absent(),
+                Value<int?> installmentCount = const Value.absent(),
+                Value<int> paidInstallments = const Value.absent(),
               }) => DebtsCompanion.insert(
                 id: id,
                 name: name,
@@ -3986,6 +4290,10 @@ class $$DebtsTableTableManager
                 color: color,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
+                kind: kind,
+                installmentCents: installmentCents,
+                installmentCount: installmentCount,
+                paidInstallments: paidInstallments,
               ),
           withReferenceMapper: (p0) => p0
               .map(

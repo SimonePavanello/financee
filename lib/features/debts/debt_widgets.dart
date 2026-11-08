@@ -94,10 +94,24 @@ class DebtProgressTile extends StatelessWidget {
                         const SizedBox(height: 2),
                         if (paidOff)
                           Text(
-                            'Estinto · ${plural(summary.paymentCount, 'pagamento', 'pagamenti')}',
+                            summary.isInstallments
+                                ? 'Estinto · ${summary.installmentCount} rate'
+                                : 'Estinto · ${plural(summary.paymentCount, 'pagamento', 'pagamenti')}',
                             style: theme.textTheme.bodySmall?.copyWith(
                               color: AppColors.income,
                               fontWeight: FontWeight.w700,
+                            ),
+                          )
+                        else if (summary.isInstallments)
+                          SensitiveText(
+                            visibleText:
+                                '${installmentsLabel(summary)} · restano '
+                                '${formatMoney(summary.remainingCents)}',
+                            hiddenText:
+                                '${installmentsLabel(summary)} · restano '
+                                '$kHiddenAmount',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: muted,
                             ),
                           )
                         else
@@ -348,6 +362,13 @@ class DebtPicker extends StatelessWidget {
                         'Estinto',
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: AppColors.income,
+                        ),
+                      )
+                    else if (d.isInstallments)
+                      Text(
+                        'Restano ${plural(d.remainingInstallments, 'rata', 'rate')}',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
                         ),
                       )
                     else

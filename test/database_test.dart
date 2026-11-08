@@ -687,6 +687,109 @@ void main() {
     });
   });
 
+  test('debiti a rate: totale calcolato e cambio di modalità', () async {
+    final id = await db.createDebt(
+      name: 'Prestito auto',
+      amountCents: 0,
+      iconKey: 'car',
+      color: 0xFF6366F1,
+      kind: DebtKind.installments,
+      installmentCents: 25000,
+      installmentCount: 60,
+      paidInstallments: 12,
+    );
+    final created = (await db.getDebts()).single;
+    expect(created.id, id);
+    expect(created.kind, DebtKind.installments);
+    expect(created.amountCents, 1500000);
+    expect(created.installmentCents, 25000);
+    expect(created.installmentCount, 60);
+    expect(created.paidInstallments, 12);
+
+    // Modificando la rata il totale si ricalcola.
+    await db.updateDebt(created.copyWith(installmentCents: const Value(30000)));
+    expect((await db.getDebts()).single.amountCents, 1800000);
+
+    // Passando a importo totale i campi delle rate si azzerano.
+    await db.updateDebt(
+      (await db.getDebts()).single.copyWith(
+        kind: DebtKind.amount,
+        amountCents: 900000,
+      ),
+    );
+    final plain = (await db.getDebts()).single;
+    expect(plain.amountCents, 900000);
+    expect(plain.installmentCents, isNull);
+    expect(plain.installmentCount, isNull);
+    expect(plain.paidInstallments, 0);
+
+    // Un debito a importo ignora eventuali campi delle rate.
+    await db.createDebt(
+      name: 'Klarna',
+      amountCents: 30000,
+      iconKey: 'card',
+      color: 0,
+      installmentCents: 10000,
+      installmentCount: 3,
+      paidInstallments: 1,
+    );
+    final klarna = (await db.getDebts()).last;
+    expect(klarna.kind, DebtKind.amount);
+    expect(klarna.amountCents, 30000);
+    expect(klarna.installmentCount, isNull);
+    expect(klarna.paidInstallments, 0);
+  });
+
+  test('migrazione v5 -> v6: debiti esistenti a importo totale', () async {
+    final dir = await Directory.systemTemp.createTemp('financee_migr_');
+    final file = File('${dir.path}/v5.sqlite');
+    final raw = sqlite3.open(file.path);
+    raw.execute(_schemaV5);
+    raw.execute(
+      "INSERT INTO categories (id, name, type, icon_key, color) "
+      "VALUES (1, 'Spesa', 0, 'cart', 4280401502)",
+    );
+    raw.execute(
+      "INSERT INTO accounts (id, name, icon_key, color, initial_balance_cents, kind) "
+      "VALUES (1, 'Conto principale', 'bank', 4284703473, 10000, 0)",
+    );
+    raw.execute(
+      "INSERT INTO debts (id, name, amount_cents, icon_key, color) "
+      "VALUES (1, 'Prestito', 100000, 'loan', 4294198366)",
+    );
+    raw.execute(
+      "INSERT INTO transactions (type, amount_cents, category_id, account_id, debt_id, date, note) "
+      "VALUES (0, 25000, 1, 1, 1, 1793833200, 'Rata')",
+    );
+    raw.execute(
+      "INSERT INTO savings_goals (account_id, name, target_cents) "
+      "VALUES (1, 'Fondo', 500000)",
+    );
+    raw.execute('PRAGMA user_version = 5');
+    raw.close();
+
+    final migrated = AppDatabase(NativeDatabase(file));
+    final debt = (await migrated.getDebts()).single;
+    expect(debt.kind, DebtKind.amount);
+    expect(debt.installmentCents, isNull);
+    expect(debt.paidInstallments, 0);
+    expect((await migrated.watchDebtPayments().first)[1]?.paidCents, 25000);
+    expect((await migrated.getSavingsGoals()).single.name, 'Fondo');
+    await migrated.createDebt(
+      name: 'Mutuo',
+      amountCents: 0,
+      iconKey: 'home',
+      color: 0,
+      kind: DebtKind.installments,
+      installmentCents: 60000,
+      installmentCount: 240,
+      paidInstallments: 30,
+    );
+    expect((await migrated.getDebts()).last.amountCents, 14400000);
+    await migrated.close();
+    await dir.delete(recursive: true);
+  });
+
   test('migrazione v4 -> v5: obiettivi utilizzabili, dati invariati', () async {
     final dir = await Directory.systemTemp.createTemp('financee_migr_');
     final file = File('${dir.path}/v4.sqlite');
@@ -764,4 +867,10 @@ CREATE TABLE "transfers" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "from
 CREATE INDEX transactions_date_idx ON transactions (date);
 CREATE INDEX transactions_account_idx ON transactions (account_id);
 CREATE INDEX transfers_date_idx ON transfers (date);
+''';
+
+/// Schema v5: come il v4 più gli obiettivi di risparmio.
+const _schemaV5 = '''
+$_schemaV4
+CREATE TABLE "savings_goals" ("id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, "account_id" INTEGER NOT NULL UNIQUE REFERENCES accounts (id), "name" TEXT NOT NULL, "target_cents" INTEGER NOT NULL, "deadline" INTEGER NULL, "created_at" INTEGER NOT NULL DEFAULT (CAST(strftime('%s', CURRENT_TIMESTAMP) AS INTEGER)));
 ''';

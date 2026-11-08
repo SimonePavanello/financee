@@ -125,76 +125,87 @@ class DebtDetailScreen extends ConsumerWidget {
                     ),
                   ],
                   error: (e, _) => [ErrorView(error: e)],
-                  data: (items) => [
-                    if (items.isNotEmpty) ...[
-                      const SizedBox(height: 20),
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            const SectionHeader(
-                              title: 'Andamento',
-                              subtitle: 'Quanto restava dopo ogni pagamento',
-                            ),
-                            const SizedBox(height: 16),
-                            _DebtChart(
-                              points: debtTimeline(
-                                amountCents: summary.amountCents,
-                                start: summary.debt.createdAt,
-                                payments: [
-                                  for (final t in items)
-                                    (t.tx.date, t.tx.amountCents),
-                                ],
+                  data: (items) {
+                    final points = debtTimeline(
+                      // Le rate pagate prima di usare l'app sono già tolte
+                      // dal punto di partenza.
+                      amountCents: summary.amountCents - summary.priorPaidCents,
+                      start: summary.debt.createdAt,
+                      payments: [
+                        for (final t in items) (t.tx.date, t.tx.amountCents),
+                      ],
+                    );
+                    // Il grafico ha senso da quando c'è più di un giorno.
+                    final now = DateTime.now();
+                    final hasHistory =
+                        items.isNotEmpty &&
+                        points.first.date.isBefore(
+                          DateTime(now.year, now.month, now.day),
+                        );
+                    return [
+                      if (hasHistory) ...[
+                        const SizedBox(height: 20),
+                        AppCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              const SectionHeader(
+                                title: 'Andamento',
+                                subtitle: 'Quanto restava dopo ogni pagamento',
                               ),
-                              color: summary.isPaidOff
-                                  ? AppColors.income
-                                  : Color(summary.debt.color),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 24),
-                    SectionHeader(
-                      title: 'Pagamenti',
-                      subtitle: items.isEmpty
-                          ? 'Nessun pagamento collegato'
-                          : '${plural(items.length, 'pagamento', 'pagamenti')} · '
-                                'ultimo il ${formatDate(items.first.tx.date)}',
-                    ),
-                    const SizedBox(height: 12),
-                    if (items.isEmpty)
-                      const AppCard(
-                        child: EmptyState(
-                          icon: Icons.receipt_long_rounded,
-                          title: 'Nessun pagamento',
-                          message:
-                              'Registra un pagamento da qui oppure, '
-                              'quando inserisci una spesa, scegli questo '
-                              'debito.',
-                        ),
-                      )
-                    else
-                      AppCard(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        child: Column(
-                          children: [
-                            for (final (i, t) in items.indexed) ...[
-                              if (i > 0) const Divider(indent: 64),
-                              TransactionTile(
-                                item: t,
-                                showAccount: true,
-                                showDebt: false,
-                                onTap: () => openMovementForm(context, t),
+                              const SizedBox(height: 16),
+                              _DebtChart(
+                                points: points,
+                                color: summary.isPaidOff
+                                    ? AppColors.income
+                                    : Color(summary.debt.color),
                               ),
                             ],
-                          ],
+                          ),
                         ),
+                      ],
+                      const SizedBox(height: 24),
+                      SectionHeader(
+                        title: 'Pagamenti',
+                        subtitle: items.isEmpty
+                            ? 'Nessun pagamento collegato'
+                            : '${plural(items.length, 'pagamento', 'pagamenti')} · '
+                                  'ultimo il ${formatDate(items.first.tx.date)}',
                       ),
-                  ],
+                      const SizedBox(height: 12),
+                      if (items.isEmpty)
+                        const AppCard(
+                          child: EmptyState(
+                            icon: Icons.receipt_long_rounded,
+                            title: 'Nessun pagamento',
+                            message:
+                                'Registra un pagamento da qui oppure, '
+                                'quando inserisci una spesa, scegli questo '
+                                'debito.',
+                          ),
+                        )
+                      else
+                        AppCard(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          child: Column(
+                            children: [
+                              for (final (i, t) in items.indexed) ...[
+                                if (i > 0) const Divider(indent: 64),
+                                TransactionTile(
+                                  item: t,
+                                  showAccount: true,
+                                  showDebt: false,
+                                  onTap: () => openMovementForm(context, t),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                    ];
+                  },
                 ),
               ],
             ),
@@ -223,6 +234,18 @@ class _DebtHeroCard extends StatelessWidget {
         Text(label, style: theme.textTheme.labelMedium?.copyWith(color: muted)),
         SensitiveAmount(
           cents: cents,
+          style: theme.textTheme.titleSmall?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    );
+    Widget plain(String label, String value) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: theme.textTheme.labelMedium?.copyWith(color: muted)),
+        Text(
+          value,
           style: theme.textTheme.titleSmall?.copyWith(
             fontWeight: FontWeight.w800,
           ),
@@ -296,25 +319,27 @@ class _DebtHeroCard extends StatelessWidget {
             spacing: 32,
             runSpacing: 12,
             children: [
-              figure('Restituiti', summary.paidCents),
+              figure('Restituiti', summary.repaidCents),
               figure('Totale del debito', summary.amountCents),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Pagamenti',
-                    style: theme.textTheme.labelMedium?.copyWith(color: muted),
-                  ),
-                  Text(
-                    '${summary.paymentCount}',
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
+              if (summary.isInstallments) ...[
+                figure('Rata', summary.installmentCents),
+                plain(
+                  'Rate pagate',
+                  '${summary.paidInstallments} di ${summary.installmentCount}',
+                ),
+              ],
+              plain('Pagamenti registrati', '${summary.paymentCount}'),
             ],
           ),
+          if (summary.isInstallments && summary.debt.paidInstallments > 0)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                '${plural(summary.debt.paidInstallments, 'rata pagata', 'rate pagate')} '
+                'prima di registrare i pagamenti qui.',
+                style: theme.textTheme.bodySmall?.copyWith(color: muted),
+              ),
+            ),
           if (summary.overpaidCents > 0)
             Padding(
               padding: const EdgeInsets.only(top: 12),
@@ -394,7 +419,10 @@ class _DebtChart extends ConsumerWidget {
                     ? const SizedBox.shrink()
                     : SideTitleWidget(
                         meta: meta,
-                        child: Text(formatCompactEuro(value), style: labelStyle),
+                        child: Text(
+                          formatCompactEuro(value),
+                          style: labelStyle,
+                        ),
                       ),
               ),
             ),
