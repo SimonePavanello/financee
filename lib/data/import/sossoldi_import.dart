@@ -336,12 +336,19 @@ class AccountImportPlan {
     required this.color,
     required this.expectedBalanceCents,
     required this.movementCount,
+    this.existingAccountId,
   });
 
   final SossoldiAccount source;
   final String targetName;
   final String iconKey;
   final int color;
+
+  /// Conto vuoto già presente con lo stesso titolo (es. il "Conto principale"
+  /// creato al primo avvio): l'import usa questo invece di crearne uno nuovo.
+  final int? existingAccountId;
+
+  bool get reusesExisting => existingAccountId != null;
 
   /// Saldo finale secondo Sossoldi: dopo l'import deve tornare uguale.
   final int expectedBalanceCents;
@@ -374,15 +381,20 @@ class SossoldiImportPlan {
     required this.skippedAccounts,
     required this.categories,
     required this.replaceExisting,
+    required this.otherAccounts,
   });
 
   /// Prepara l'import. I conti disattivati e senza movimenti vengono saltati.
-  /// Se [replaceExisting] è falso e un titolo esiste già, si aggiunge
-  /// " (Sossoldi)" così i saldi dei conti importati restano esatti.
+  ///
+  /// Se [replaceExisting] è falso, un conto importato con lo stesso titolo di
+  /// un conto esistente vuoto (nessun movimento in [existingAccountUsage] e
+  /// saldo iniziale zero) finisce in quel conto. Se invece il conto esistente
+  /// è in uso si aggiunge " (Sossoldi)", così i saldi importati restano esatti.
   factory SossoldiImportPlan.build(
     SossoldiExport export, {
     required List<CategoryEntity> existingCategories,
     required List<AccountEntity> existingAccounts,
+    required Map<int, int> existingAccountUsage,
     required bool replaceExisting,
   }) {
     final balances = export.balances;
@@ -397,6 +409,17 @@ class SossoldiImportPlan {
     final takenNames = replaceExisting
         ? <String>{}
         : existingAccounts.map((a) => a.name.toLowerCase()).toSet();
+    final reusable = <String, AccountEntity>{};
+    if (!replaceExisting) {
+      for (final a in existingAccounts) {
+        if (a.kind == AccountKind.standard &&
+            a.initialBalanceCents == 0 &&
+            (existingAccountUsage[a.id] ?? 0) == 0) {
+          reusable.putIfAbsent(a.name.trim().toLowerCase(), () => a);
+        }
+      }
+    }
+    final reusedIds = <int>{};
     final accounts = <AccountImportPlan>[];
     final skipped = <SossoldiAccount>[];
     for (final a in export.accounts) {
@@ -406,7 +429,16 @@ class SossoldiImportPlan {
       }
       var name = kSossoldiAccountNames[a.name.trim().toLowerCase()] ??
           _capitalize(a.name.trim());
-      if (takenNames.contains(name.toLowerCase())) name = '$name (Sossoldi)';
+      final reuse = reusable.remove(name.toLowerCase());
+      if (reuse != null) {
+        name = reuse.name;
+        reusedIds.add(reuse.id);
+      } else {
+        final base = name;
+        for (var n = 1; takenNames.contains(name.toLowerCase()); n++) {
+          name = n == 1 ? '$base (Sossoldi)' : '$base (Sossoldi $n)';
+        }
+      }
       takenNames.add(name.toLowerCase());
       final (icon, color) = a.isMain
           ? ('bank', 0xFF6366F1)
@@ -424,6 +456,7 @@ class SossoldiImportPlan {
           color: color,
           expectedBalanceCents: balances[a.id]!,
           movementCount: usage[a.id] ?? 0,
+          existingAccountId: reuse?.id,
         ),
       );
     }
@@ -464,6 +497,10 @@ class SossoldiImportPlan {
       skippedAccounts: skipped,
       categories: categories,
       replaceExisting: replaceExisting,
+      otherAccounts: [
+        for (final a in existingAccounts)
+          if (!reusedIds.contains(a.id)) a,
+      ],
     );
   }
 
@@ -472,6 +509,10 @@ class SossoldiImportPlan {
   final List<SossoldiAccount> skippedAccounts;
   final List<CategoryImportPlan> categories;
   final bool replaceExisting;
+
+  /// Conti già presenti in cui l'import non scrive: con [replaceExisting]
+  /// vengono eliminati, altrimenti restano accanto a quelli importati.
+  final List<AccountEntity> otherAccounts;
 
   int get transactionCount => export.movements
       .where((m) => m.type != SossoldiMovementType.transfer)
@@ -487,6 +528,16 @@ class SossoldiImportPlan {
         for (final c in categories)
           if (!c.exists) c.targetName,
       }.toList();
+}
+
+/// L'import non è stato eseguito (nessun dato modificato).
+class SossoldiImportException implements Exception {
+  const SossoldiImportException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class AccountCheck {
@@ -530,6 +581,28 @@ extension SossoldiImport on AppDatabase {
       }
 
       for (final (i, a) in plan.accounts.indexed) {
+        final existingId = a.existingAccountId;
+        if (existingId != null) {
+          // Il conto deve essere ancora vuoto, altrimenti il saldo non
+          // tornerebbe con quello di Sossoldi.
+          final current = await (select(accounts)
+                ..where((x) => x.id.equals(existingId)))
+              .getSingleOrNull();
+          if (current == null ||
+              current.initialBalanceCents != 0 ||
+              await countAccountUsage(existingId) > 0) {
+            throw SossoldiImportException(
+              'Il conto "${a.targetName}" è cambiato nel frattempo: '
+              'riapri l\'anteprima e riprova.',
+            );
+          }
+          await (update(accounts)..where((x) => x.id.equals(existingId)))
+              .write(
+            AccountsCompanion(initialBalanceCents: Value(a.source.startingCents)),
+          );
+          accountIds[a.source.id] = existingId;
+          continue;
+        }
         accountIds[a.source.id] = await into(accounts).insert(
           AccountsCompanion.insert(
             name: a.targetName,

@@ -25,7 +25,10 @@ class _ImportSossoldiScreenState extends ConsumerState<ImportSossoldiScreen> {
   String? _fileName;
   SossoldiExport? _export;
   String? _error;
-  bool _replace = false;
+
+  /// Scelta dell'utente; finché è `null` si sostituiscono i dati solo se
+  /// non ci sono movimenti (es. app appena installata o solo conti vuoti).
+  bool? _replace;
   bool _busy = false;
   SossoldiImportResult? _result;
 
@@ -111,13 +114,22 @@ class _ImportSossoldiScreenState extends ConsumerState<ImportSossoldiScreen> {
     final export = _export;
     final categories = ref.watch(categoriesProvider).asData?.value;
     final accounts = ref.watch(accountsProvider).asData?.value;
-    final plan = export == null || categories == null || accounts == null
+    final usage = ref.watch(accountUsageProvider).asData?.value;
+    final balances =
+        ref.watch(accountBalancesProvider).asData?.value ?? const <int, int>{};
+    final hasMovements = usage?.values.any((n) => n > 0) ?? false;
+    final replace = _replace ?? !hasMovements;
+    final plan = export == null ||
+            categories == null ||
+            accounts == null ||
+            usage == null
         ? null
         : SossoldiImportPlan.build(
             export,
             existingCategories: categories,
             existingAccounts: accounts,
-            replaceExisting: _replace,
+            existingAccountUsage: usage,
+            replaceExisting: replace,
           );
 
     return Scaffold(
@@ -137,23 +149,25 @@ class _ImportSossoldiScreenState extends ConsumerState<ImportSossoldiScreen> {
                 else ...[
                   _SummaryCard(fileName: _fileName!, plan: plan, onChange: _pickFile),
                   const SizedBox(height: 16),
-                  _AccountsCard(plan: plan),
-                  const SizedBox(height: 16),
-                  _CategoriesCard(plan: plan),
-                  const SizedBox(height: 16),
                   AppCard(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: SwitchListTile(
-                      value: _replace,
+                      value: replace,
                       onChanged: _busy ? null : (v) => setState(() => _replace = v),
                       title: const Text('Sostituisci i dati attuali'),
                       subtitle: Text(
-                        _replace
-                            ? 'Conti, movimenti e trasferimenti presenti (es. i dati di esempio) verranno eliminati. Le categorie restano.'
+                        replace
+                            ? hasMovements
+                                ? 'Conti, movimenti e trasferimenti presenti (es. i dati di esempio) verranno eliminati. Le categorie restano.'
+                                : 'Non ci sono movimenti: i conti attuali lasciano il posto a quelli di Sossoldi. Le categorie restano.'
                             : 'I conti importati si aggiungono a quelli già presenti.',
                       ),
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  _AccountsCard(plan: plan, balances: balances),
+                  const SizedBox(height: 16),
+                  _CategoriesCard(plan: plan),
                   const SizedBox(height: 24),
                   GradientButton(
                     label:
@@ -296,14 +310,21 @@ class _Pill extends StatelessWidget {
 }
 
 class _AccountsCard extends StatelessWidget {
-  const _AccountsCard({required this.plan});
+  const _AccountsCard({required this.plan, required this.balances});
 
   final SossoldiImportPlan plan;
+
+  /// Saldi attuali dei conti già presenti (id -> centesimi).
+  final Map<int, int> balances;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final muted = theme.colorScheme.onSurfaceVariant;
+    final others = plan.otherAccounts;
+    final othersList = others
+        .map((a) => '${a.name} (${formatMoney(balances[a.id] ?? 0)})')
+        .join(', ');
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -329,7 +350,8 @@ class _AccountsCard extends StatelessWidget {
                         ),
                         Text(
                           'Saldo iniziale ${formatMoney(a.source.startingCents)} · '
-                          '${plural(a.movementCount, 'movimento', 'movimenti')}',
+                          '${plural(a.movementCount, 'movimento', 'movimenti')}'
+                          '${a.reusesExisting ? ' · nel conto già presente' : ''}',
                           style: theme.textTheme.labelSmall?.copyWith(color: muted),
                         ),
                       ],
@@ -343,6 +365,31 @@ class _AccountsCard extends StatelessWidget {
                 ],
               ),
             ),
+          if (others.isNotEmpty) ...[
+            const Divider(height: 24),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  plan.replaceExisting
+                      ? Icons.delete_outline_rounded
+                      : Icons.info_outline_rounded,
+                  size: 18,
+                  color: plan.replaceExisting ? AppColors.expense : muted,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    plan.replaceExisting
+                        ? 'Verranno eliminati: $othersList.'
+                        : 'Restano anche: $othersList. Se sono dati di esempio, '
+                            'attiva "Sostituisci i dati attuali".',
+                    style: theme.textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

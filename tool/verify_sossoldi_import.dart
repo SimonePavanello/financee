@@ -27,6 +27,7 @@ Future<void> main(List<String> args) async {
     export,
     existingCategories: await db.getCategories(),
     existingAccounts: await db.getAccounts(),
+    existingAccountUsage: await db.watchAccountUsage().first,
     replaceExisting: true,
   );
 

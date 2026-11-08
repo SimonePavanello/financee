@@ -448,8 +448,19 @@ class AppDatabase extends _$AppDatabase {
             (rows) => {for (final r in rows) r.read<int>('id'): r.read<int>('n')},
           );
 
-  Future<int> countAccountUsage(int accountId) async =>
-      (await watchAccountUsage().first)[accountId] ?? 0;
+  Future<int> countAccountUsage(int accountId) async {
+    final row = await customSelect(
+      '''
+      SELECT (SELECT COUNT(*) FROM transactions x
+              WHERE x.account_id = ?1 OR x.voucher_account_id = ?1)
+        + (SELECT COUNT(*) FROM transfers x
+           WHERE x.from_account_id = ?1 OR x.to_account_id = ?1) AS n
+      ''',
+      variables: [Variable.withInt(accountId)],
+      readsFrom: {transactions, transfers},
+    ).getSingle();
+    return row.read<int>('n');
+  }
 
   /// Elimina un conto. Se [mergeInto] è valorizzato, movimenti, trasferimenti
   /// e saldo iniziale vengono uniti a quel conto (il saldo del conto di

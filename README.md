@@ -102,7 +102,11 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   CSV di Sossoldi, mostra un'anteprima di come conti e categorie vengono
   trasformati (le categorie inglesi o duplicate confluiscono in quelle di
   Financee, le altre vengono create), importa tutto in un'unica operazione e
-  verifica che i saldi finali coincidano con quelli di Sossoldi. La mappatura
+  verifica che i saldi finali coincidano con quelli di Sossoldi. Se non ci
+  sono movimenti propone di sostituire i conti attuali (es. quelli dei dati di
+  esempio); aggiungendo ai dati esistenti, un conto vuoto con lo stesso nome
+  (come il "Conto principale" del primo avvio) riceve il conto di Sossoldi
+  invece di creare un doppione "(Sossoldi)". La mappatura
   è in `lib/data/import/sossoldi_import.dart`. Per provarlo senza toccare
   nulla: `dart run tool/verify_sossoldi_import.dart <export.csv>`.
 - **Privacy**: saldo del mese, patrimonio e saldi dei conti compaiono come

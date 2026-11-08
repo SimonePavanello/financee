@@ -94,8 +94,16 @@ void main() {
           SossoldiExport.parse(_csv),
           existingCategories: await db.getCategories(),
           existingAccounts: await db.getAccounts(),
+          existingAccountUsage: await db.watchAccountUsage().first,
           replaceExisting: replace,
         );
+
+    Future<Map<String, int>> balancesByName() async {
+      final balances = await db.watchAccountBalances().first;
+      return {
+        for (final a in await db.getAccounts()) a.name: balances[a.id] ?? 0,
+      };
+    }
 
     test('anteprima: conti saltati e mappatura delle categorie', () async {
       final p = await plan(replace: true);
@@ -140,12 +148,87 @@ void main() {
       expect(await db.getSavingsGoals(), isEmpty);
     });
 
-    test('aggiungendo ai dati esistenti i nomi dei conti non si scontrano', () async {
+    test('il conto principale vuoto del primo avvio riceve quello di Sossoldi', () async {
+      final defaultId = (await db.getAccounts()).single.id;
       final p = await plan(replace: false);
-      expect(p.accounts.map((a) => a.targetName), ['Risparmi', 'Conto principale (Sossoldi)']);
+      expect(p.accounts.map((a) => a.targetName), ['Risparmi', 'Conto principale']);
+      expect(p.accounts.last.existingAccountId, defaultId);
+      expect(p.accounts.first.reusesExisting, isFalse);
+      expect(p.otherAccounts, isEmpty);
+
       final result = await db.importSossoldi(p);
       expect(result.balancesMatch, isTrue);
-      expect((await db.getAccounts()).length, 3);
+      final accounts = await db.getAccounts();
+      expect(accounts.map((a) => a.name), unorderedEquals(['Conto principale', 'Risparmi']));
+      final main = accounts.firstWhere((a) => a.id == defaultId);
+      expect(main.initialBalanceCents, 2914);
+      expect(await db.countAccountUsage(defaultId), 8);
+    });
+
+    test('i conti già in uso non vengono toccati: i nomi non si scontrano', () async {
+      final defaultId = (await db.getAccounts()).single.id;
+      final groceries = (await db.getCategories())
+          .firstWhere((c) => c.name == 'Spesa' && c.type == TxType.expense);
+      await db.insertTransactions([
+        TransactionsCompanion.insert(
+          type: TxType.expense,
+          amountCents: 1500,
+          categoryId: groceries.id,
+          accountId: defaultId,
+          date: DateTime(2026, 1, 5),
+        ),
+      ]);
+      // Saldo iniziale diverso da zero: non è un conto vuoto.
+      await db.createAccount(
+          name: 'Risparmi', iconKey: 'savings', color: 0, initialBalanceCents: 250000);
+      await db.createAccount(name: 'Contanti', iconKey: 'cash', color: 0);
+
+      final p = await plan(replace: false);
+      expect(p.accounts.map((a) => a.targetName),
+          ['Risparmi (Sossoldi)', 'Conto principale (Sossoldi)']);
+      expect(p.accounts.any((a) => a.reusesExisting), isFalse);
+      expect(p.otherAccounts.map((a) => a.name),
+          ['Conto principale', 'Risparmi', 'Contanti']);
+
+      final result = await db.importSossoldi(p);
+      expect(result.balancesMatch, isTrue);
+      final balances = await balancesByName();
+      expect(balances['Conto principale'], -1500);
+      expect(balances['Risparmi'], 250000);
+      expect(balances['Contanti'], 0);
+      expect(balances, hasLength(5));
+    });
+
+    test('sostituendo i dati spariscono anche i conti di esempio', () async {
+      await db.createAccount(
+          name: 'Contanti', iconKey: 'cash', color: 0, initialBalanceCents: 8000);
+      await db.createAccount(
+          name: 'Risparmi', iconKey: 'savings', color: 0, initialBalanceCents: 250000);
+      final p = await plan(replace: true);
+      expect(p.otherAccounts.map((a) => a.name),
+          ['Conto principale', 'Contanti', 'Risparmi']);
+      expect(p.accounts.any((a) => a.reusesExisting), isFalse);
+
+      final result = await db.importSossoldi(p);
+      expect(result.balancesMatch, isTrue);
+      final export = SossoldiExport.parse(_csv);
+      expect(await balancesByName(), {
+        'Risparmi': export.balances[1],
+        'Conto principale': export.balances[2],
+      });
+    });
+
+    test('se il conto vuoto viene usato prima dell\'import, non cambia nulla', () async {
+      final account = (await db.getAccounts()).single;
+      final p = await plan(replace: false);
+      expect(p.accounts.last.existingAccountId, account.id);
+      await db.updateAccount(account.copyWith(initialBalanceCents: 100));
+
+      await expectLater(db.importSossoldi(p), throwsA(isA<SossoldiImportException>()));
+      final accounts = await db.getAccounts();
+      expect(accounts.single.initialBalanceCents, 100);
+      expect(await db.watchTransactionsBetween(DateTime(2000), DateTime(2100)).first,
+          isEmpty);
     });
   });
 }
