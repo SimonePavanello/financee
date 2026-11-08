@@ -5,7 +5,11 @@ import 'package:drift/drift.dart';
 import '../app_database.dart';
 
 /// Identificativo del formato, scritto in ogni file di backup.
-const kBackupFormat = 'financiee-backup';
+const kBackupFormat = 'financee-backup';
+
+/// Identificativi accettati in lettura: anche quello dei backup creati
+/// quando l'app si chiamava Financiee.
+const _readableFormats = {kBackupFormat, 'financiee-backup'};
 
 /// Versione del formato del file (non dello schema del database).
 const kBackupFormatVersion = 1;
@@ -13,9 +17,9 @@ const kBackupFormatVersion = 1;
 /// Impostazioni (chiavi delle preferenze) salvate insieme ai dati.
 const kBackupSettingKeys = ['meal_voucher_value_cents', 'meal_voucher_last_load'];
 
-/// Nome del file di backup: `financiee-backup-2026-11-08.json`.
+/// Nome del file di backup: `financee-backup-2026-11-08.json`.
 String backupFileName(DateTime d) =>
-    'financiee-backup-${d.year}-${_two(d.month)}-${_two(d.day)}.json';
+    'financee-backup-${d.year}-${_two(d.month)}-${_two(d.day)}.json';
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
@@ -71,6 +75,32 @@ class BackupFile {
     return (toDate(dates.first), toDate(dates.last));
   }
 
+  /// `true` se le tabelle di [other] contengono esattamente gli stessi dati
+  /// (stesse colonne e stesse righe, nello stesso ordine).
+  bool hasSameData(BackupFile other) {
+    if (tables.length != other.tables.length) return false;
+    for (final MapEntry(:key, :value) in tables.entries) {
+      final o = other.tables[key];
+      if (o == null ||
+          !_sameList(value.columns, o.columns) ||
+          value.rows.length != o.rows.length) {
+        return false;
+      }
+      for (final (i, row) in value.rows.indexed) {
+        if (!_sameList(row, o.rows[i])) return false;
+      }
+    }
+    return true;
+  }
+
+  static bool _sameList(List<Object?> a, List<Object?> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i] != b[i]) return false;
+    }
+    return true;
+  }
+
   String encode() => jsonEncode({
     'format': kBackupFormat,
     'formatVersion': kBackupFormatVersion,
@@ -87,11 +117,11 @@ class BackupFile {
   /// l'utente se il file non è un backup valido o è di una versione più
   /// recente dell'app ([currentSchemaVersion]).
   static BackupFile parse(String text, {required int currentSchemaVersion}) {
-    const notBackup = 'Il file non è un backup di Financiee.';
+    const notBackup = 'Il file non è un backup di Financee.';
     const damaged = 'Il backup è incompleto o danneggiato.';
     const newer =
         'Il backup è stato creato con una versione più recente di '
-        'Financiee: aggiorna l\'app per ripristinarlo.';
+        'Financee: aggiorna l\'app per ripristinarlo.';
 
     final Object? json;
     try {
@@ -99,7 +129,8 @@ class BackupFile {
     } on FormatException {
       throw const FormatException(notBackup);
     }
-    if (json is! Map<String, Object?> || json['format'] != kBackupFormat) {
+    if (json is! Map<String, Object?> ||
+        !_readableFormats.contains(json['format'])) {
       throw const FormatException(notBackup);
     }
     final formatVersion = json['formatVersion'];
@@ -254,5 +285,20 @@ extension BackupDatabase on AppDatabase {
       }
     });
     notifyUpdates({for (final t in backupTables) TableUpdate.onTable(t)});
+  }
+}
+
+/// Copia tutti i dati di [from] in [to] (sostituendo quelli di [to]) e
+/// controlla che la copia sia identica. Lancia un'eccezione se non
+/// coincide. Non chiude i database.
+Future<void> copyDatabase({
+  required AppDatabase from,
+  required AppDatabase to,
+}) async {
+  final data = await from.createBackup();
+  await to.restoreBackup(data);
+  final check = await to.createBackup();
+  if (!data.hasSameData(check)) {
+    throw StateError('La copia del database non coincide con l\'originale');
   }
 }

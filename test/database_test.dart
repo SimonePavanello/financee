@@ -2,11 +2,11 @@ import 'dart:io';
 
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
-import 'package:financiee/data/app_database.dart';
-import 'package:financiee/data/default_categories.dart';
-import 'package:financiee/data/models.dart';
-import 'package:financiee/data/sample_data.dart';
-import 'package:financiee/domain/savings_goals.dart';
+import 'package:financee/data/app_database.dart';
+import 'package:financee/data/default_categories.dart';
+import 'package:financee/data/models.dart';
+import 'package:financee/data/sample_data.dart';
+import 'package:financee/domain/savings_goals.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:test/test.dart';
@@ -209,7 +209,7 @@ void main() {
   });
 
   test('migrazione v1 -> v2: i movimenti esistenti vanno nel conto principale', () async {
-    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final dir = await Directory.systemTemp.createTemp('financee_migr_');
     final file = File('${dir.path}/v1.sqlite');
     // Schema e dati come li salvava la versione 1 dell'app.
     final raw = sqlite3.open(file.path);
@@ -408,7 +408,7 @@ void main() {
   });
 
   test('migrazione v2 -> v3: conti e movimenti restano, buoni a zero', () async {
-    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final dir = await Directory.systemTemp.createTemp('financee_migr_');
     final file = File('${dir.path}/v2.sqlite');
     final raw = sqlite3.open(file.path);
     raw.execute(_schemaV2);
@@ -541,7 +541,7 @@ void main() {
   });
 
   test('migrazione v3 -> v4: movimenti senza debito, debiti utilizzabili', () async {
-    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final dir = await Directory.systemTemp.createTemp('financee_migr_');
     final file = File('${dir.path}/v3.sqlite');
     final raw = sqlite3.open(file.path);
     raw.execute(_schemaV3);
@@ -688,7 +688,7 @@ void main() {
   });
 
   test('migrazione v4 -> v5: obiettivi utilizzabili, dati invariati', () async {
-    final dir = await Directory.systemTemp.createTemp('financiee_migr_');
+    final dir = await Directory.systemTemp.createTemp('financee_migr_');
     final file = File('${dir.path}/v4.sqlite');
     final raw = sqlite3.open(file.path);
     raw.execute(_schemaV4);

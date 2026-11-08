@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'app.dart';
+import 'data/connection.dart';
 import 'providers.dart';
 
 Future<void> main() async {
@@ -18,10 +19,15 @@ Future<void> main() async {
   Intl.defaultLocale = 'it_IT';
   await initializeDateFormatting('it_IT');
   final prefs = await SharedPreferences.getInstance();
+  // Sposta i dati dal database col vecchio nome dell'app, se c'è ancora.
+  final databaseName = await prepareAppDatabase(prefs);
 
   runApp(
     ProviderScope(
-      overrides: [sharedPreferencesProvider.overrideWithValue(prefs)],
+      overrides: [
+        sharedPreferencesProvider.overrideWithValue(prefs),
+        databaseNameProvider.overrideWithValue(databaseName),
+      ],
       child: const FinanceApp(),
     ),
   );

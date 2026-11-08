@@ -440,7 +440,7 @@ class _CategoriesCard extends StatelessWidget {
         children: [
           const SectionHeader(
             title: 'Categorie',
-            subtitle: 'Come verranno raggruppate in Financiee',
+            subtitle: 'Come verranno raggruppate in Financee',
           ),
           section(TxType.expense),
           section(TxType.income),

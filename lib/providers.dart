@@ -16,8 +16,13 @@ import 'domain/savings_goals.dart';
 // Infrastruttura
 // -----------------------------------------------------------------------------
 
+/// Nome del database da aprire (vedi [prepareAppDatabase], in `main()`).
+final databaseNameProvider = Provider<String>((ref) => kDatabaseName);
+
 final databaseProvider = Provider<AppDatabase>((ref) {
-  final db = AppDatabase(openAppDatabaseConnection());
+  final db = AppDatabase(
+    openAppDatabaseConnection(ref.watch(databaseNameProvider)),
+  );
   ref.onDispose(db.close);
   return db;
 });

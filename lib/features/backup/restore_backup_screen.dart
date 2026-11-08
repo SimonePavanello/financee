@@ -29,7 +29,7 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
   bool _done = false;
 
   static const _jsonTypes = XTypeGroup(
-    label: 'Backup di Financiee',
+    label: 'Backup di Financee',
     extensions: ['json'],
     mimeTypes: ['application/json', 'text/plain', 'application/octet-stream'],
     uniformTypeIdentifiers: ['public.json'],
@@ -149,7 +149,7 @@ class _RestoreBackupScreenState extends ConsumerState<RestoreBackupScreen> {
                       icon: Icons.settings_backup_restore_rounded,
                       title: 'Scegli un backup',
                       message:
-                          'Seleziona un file financiee-backup-….json creato '
+                          'Seleziona un file financee-backup-….json creato '
                           'con "Esporta backup". Prima di sostituire i dati '
                           'vedrai cosa contiene.',
                       actions: [

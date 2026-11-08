@@ -5,9 +5,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/native.dart';
-import 'package:financiee/core/utils/formatters.dart';
-import 'package:financiee/data/app_database.dart';
-import 'package:financiee/data/import/sossoldi_import.dart';
+import 'package:financee/core/utils/formatters.dart';
+import 'package:financee/data/app_database.dart';
+import 'package:financee/data/import/sossoldi_import.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:intl/intl.dart';
 

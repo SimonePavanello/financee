@@ -1,4 +1,4 @@
-# Financiee
+# Financee
 
 App Flutter per la gestione delle finanze personali: entrate, spese, categorie,
 dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
@@ -48,7 +48,7 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
   dashboard e sulla card del conto. Unendo due conti l'obiettivo passa al
   conto rimasto, se non ne ha già uno.
 - **Backup e ripristino** (Impostazioni → Backup): "Esporta backup" salva un
-  file `financiee-backup-AAAA-MM-GG.json` con tutti i dati (conti, categorie,
+  file `financee-backup-AAAA-MM-GG.json` con tutti i dati (conti, categorie,
   movimenti, trasferimenti, debiti, obiettivi e valore del buono pasto); sul
   web si scarica, su Android si condivide (Drive, email, "Salva in File").
   "Ripristina da un backup" mostra prima cosa contiene il file (conti,
@@ -90,7 +90,7 @@ dashboard con grafici e report CSV. Piattaforme attuali: **Android** e **web**
 - **Import da Sossoldi** (Impostazioni → Importa da Sossoldi): legge l'export
   CSV di Sossoldi, mostra un'anteprima di come conti e categorie vengono
   trasformati (le categorie inglesi o duplicate confluiscono in quelle di
-  Financiee, le altre vengono create), importa tutto in un'unica operazione e
+  Financee, le altre vengono create), importa tutto in un'unica operazione e
   verifica che i saldi finali coincidano con quelli di Sossoldi. La mappatura
   è in `lib/data/import/sossoldi_import.dart`. Per provarlo senza toccare
   nulla: `dart run tool/verify_sossoldi_import.dart <export.csv>`.
@@ -124,10 +124,32 @@ precedenti è automatico (coperto da test di migrazione): dalla 1 i movimenti
 già registrati finiscono in "Conto principale"; dalla 2, 3 e 4 conti e
 movimenti restano com'erano, senza buoni, debiti o obiettivi.
 
+Il database si chiama `financee` (file `financee.sqlite` su Android/iOS,
+database `financee` nel browser). Fino all'8/11/2026 l'app si chiamava
+Financiee e il database `financiee`: al primo avvio `prepareAppDatabase`
+(`lib/data/connection.dart`) ne copia tutti i dati nel nuovo, controlla che
+la copia sia identica tabella per tabella e solo allora elimina il vecchio;
+se qualcosa va storto continua a usare il vecchio e riprova all'avvio dopo.
+
 Il file di backup è JSON: per ogni tabella i nomi delle colonne e le righe
 così come sono nel database (date in secondi dal 1970), più la versione dello
 schema da cui è stato creato. Formato e ripristino sono in
-`lib/data/backup/backup.dart`.
+`lib/data/backup/backup.dart`; si ripristinano anche i backup creati quando
+l'app si chiamava Financiee.
+
+## Icona
+
+Il monogramma F (indaco-viola, con la barra centrale e la moneta verde menta)
+è disegnato in `tool/generate_app_icon.dart` e, uguale, nel logo dell'app
+(`lib/widgets/app_logo.dart`). Per rigenerare le immagini:
+
+```bash
+dart run tool/generate_app_icon.dart     # assets/branding/ e icone web
+dart run flutter_launcher_icons          # icone Android (e iOS sul Mac)
+```
+
+Android usa l'icona adattiva (sfondo sfumato e monogramma in primo piano) e,
+da Android 13, quella monocromatica per le icone a tema.
 
 ## Struttura
 
@@ -142,9 +164,10 @@ lib/
   features/
     dashboard/  transactions/  accounts/  categories/  reports/  settings/  shell/
     backup/  debts/  goals/  meal_vouchers/
-  widgets/                              componenti condivisi (card, grafici, righe movimento)
+  widgets/                              componenti condivisi (card, grafici, logo, righe movimento)
+assets/branding/                        immagini sorgente dell'icona
 web/sqlite3.wasm, web/drift_worker.js   database sul web
-tool/                                   sorgente del worker Drift, generatore CSV di esempio
+tool/                                   worker Drift, generatore CSV di esempio e dell'icona
 test/                                   test di logica, CSV, database e backup
 ```
 
@@ -191,6 +214,19 @@ dalle release di [sqlite3.dart](https://github.com/simolus3/sqlite3.dart/release
     può sviluppare in WSL2, in un container o su un'altra macchina.
 - Per Android serve installare Android Studio (SDK + emulatore) e poi
   `flutter doctor --android-licenses`.
+
+## iOS (sul Mac)
+
+La cartella `ios/` non c'è ancora: si crea sul Mac, con Xcode installato.
+
+```bash
+flutter create --platforms=ios --org com.financee .
+```
+
+Poi in `pubspec.yaml` si mette `ios: true` sotto `flutter_launcher_icons` e
+si lancia `dart run flutter_launcher_icons` per le icone. L'identificativo
+iOS sarà `com.financee.financee`; per averlo uguale ad Android
+(`com.financee.app`) si cambia in Xcode (Runner → Signing & Capabilities).
 
 ## Prossimi passi possibili
 

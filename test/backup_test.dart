@@ -2,9 +2,9 @@ import 'dart:convert';
 
 import 'package:drift/drift.dart' show driftRuntimeOptions;
 import 'package:drift/native.dart';
-import 'package:financiee/data/app_database.dart';
-import 'package:financiee/data/backup/backup.dart';
-import 'package:financiee/data/sample_data.dart';
+import 'package:financee/data/app_database.dart';
+import 'package:financee/data/backup/backup.dart';
+import 'package:financee/data/sample_data.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:test/test.dart';
 
@@ -63,7 +63,7 @@ void main() {
   }
 
   test('nome del file con la data', () {
-    expect(backupFileName(DateTime(2026, 3, 7, 22)), 'financiee-backup-2026-03-07.json');
+    expect(backupFileName(DateTime(2026, 3, 7, 22)), 'financee-backup-2026-03-07.json');
   });
 
   test('esporta e ripristina tutto identico, sostituendo i dati presenti', () async {
@@ -136,6 +136,49 @@ void main() {
     expect(restored.every((a) => a.kind == AccountKind.standard), isTrue);
   });
 
+  test('copia tutti i dati in un altro database e controlla che coincidano', () async {
+    await fill(db);
+    final expected = await dump(db);
+    final balances = await db.watchAccountBalances().first;
+    // Il nuovo database ha già categorie e conto predefiniti: li sostituisce.
+    final target = AppDatabase(NativeDatabase.memory());
+    addTearDown(target.close);
+    expect(await target.getAccounts(), hasLength(1));
+    await copyDatabase(from: db, to: target);
+    expect(await dump(target), expected);
+    expect(await target.watchAccountBalances().first, balances);
+    // L'originale resta com'era.
+    expect(await dump(db), expected);
+  });
+
+  test('confronto dei dati: basta una cella diversa', () async {
+    await fill(db);
+    final a = await db.createBackup();
+    final b = await db.createBackup();
+    expect(a.hasSameData(b), isTrue);
+    final txs = b.tables['transactions']!;
+    final changed = BackupFile(
+      createdAt: b.createdAt,
+      schemaVersion: b.schemaVersion,
+      tables: {
+        ...b.tables,
+        'transactions': BackupTable(txs.columns, [
+          for (final (i, r) in txs.rows.indexed)
+            i == 0 ? ([...r]..[txs.columns.indexOf('amount_cents')] = 1) : r,
+        ]),
+      },
+    );
+    expect(a.hasSameData(changed), isFalse);
+    expect(
+      a.hasSameData(BackupFile(
+        createdAt: b.createdAt,
+        schemaVersion: b.schemaVersion,
+        tables: {...b.tables}..remove('debts'),
+      )),
+      isFalse,
+    );
+  });
+
   test('riferimenti non validi: errore e dati attuali intatti', () async {
     await fill(db);
     final before = await dump(db);
@@ -189,8 +232,16 @@ void main() {
       expect(b.dateRange, isNull);
     });
 
+    test('accetta i backup creati quando l\'app si chiamava Financiee', () {
+      final b = BackupFile.parse(
+        encoded((j) => {...j, 'format': 'financiee-backup'}),
+        currentSchemaVersion: 5,
+      );
+      expect(b.accounts, 1);
+    });
+
     test('rifiuta file che non sono backup, danneggiati o più recenti', () {
-      const notBackup = 'Il file non è un backup di Financiee.';
+      const notBackup = 'Il file non è un backup di Financee.';
       const damaged = 'Il backup è incompleto o danneggiato.';
       rejects('id;nome\n1;Conto', notBackup);
       rejects('[1, 2]', notBackup);

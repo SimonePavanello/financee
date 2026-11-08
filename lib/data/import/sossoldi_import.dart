@@ -219,10 +219,10 @@ int _cents(String value) {
 }
 
 // =============================================================================
-// Mappatura verso Financiee
+// Mappatura verso Financee
 // =============================================================================
 
-/// Categorie di Sossoldi (nome in minuscolo) -> categoria di Financiee.
+/// Categorie di Sossoldi (nome in minuscolo) -> categoria di Financee.
 /// Il tipo (entrata/uscita) resta quello della categoria di origine.
 /// Le categorie non elencate vengono create con lo stesso nome.
 const kSossoldiCategoryMap = <String, String>{
@@ -306,7 +306,7 @@ const _newCategoryStyle = <String, (String, int)>{
   'Altre entrate': ('payments', 0xFF64748B),
 };
 
-/// Conti di Sossoldi (nome in minuscolo) -> titolo in Financiee.
+/// Conti di Sossoldi (nome in minuscolo) -> titolo in Financee.
 const kSossoldiAccountNames = <String, String>{
   'income': 'Conto principale',
   'main': 'Conto principale',
@@ -361,7 +361,7 @@ class CategoryImportPlan {
   final TxType type;
   final String targetName;
 
-  /// La categoria esiste già in Financiee (altrimenti verrà creata).
+  /// La categoria esiste già in Financee (altrimenti verrà creata).
   final bool exists;
   int count = 0;
   int totalCents = 0;
@@ -520,7 +520,7 @@ extension SossoldiImport on AppDatabase {
   /// che i saldi finali coincidano con quelli di Sossoldi.
   Future<SossoldiImportResult> importSossoldi(SossoldiImportPlan plan) async {
     var createdCategories = 0;
-    final accountIds = <int, int>{}; // id Sossoldi -> id Financiee
+    final accountIds = <int, int>{}; // id Sossoldi -> id Financee
 
     await transaction(() async {
       if (plan.replaceExisting) {

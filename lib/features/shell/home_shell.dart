@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/theme/app_colors.dart';
 import '../../providers.dart';
+import '../../widgets/app_logo.dart';
 import '../accounts/accounts_screen.dart';
 import '../categories/categories_screen.dart';
 import '../dashboard/dashboard_screen.dart';
@@ -164,15 +164,7 @@ class _Logo extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mark = Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white),
-    );
+    const mark = AppLogo();
     if (!extended) return mark;
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -180,7 +172,7 @@ class _Logo extends StatelessWidget {
         mark,
         const SizedBox(width: 12),
         Text(
-          'Financiee',
+          'Financee',
           style: Theme.of(context)
               .textTheme
               .titleLarge

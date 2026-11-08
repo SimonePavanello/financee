@@ -1,4 +1,4 @@
-package com.financiee.financiee
+package com.financee.app
 
 import io.flutter.embedding.android.FlutterActivity
 

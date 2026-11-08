@@ -1,7 +1,7 @@
 import 'package:drift/native.dart';
-import 'package:financiee/data/app_database.dart';
-import 'package:financiee/data/import/csv_parser.dart';
-import 'package:financiee/data/import/sossoldi_import.dart';
+import 'package:financee/data/app_database.dart';
+import 'package:financee/data/import/csv_parser.dart';
+import 'package:financee/data/import/sossoldi_import.dart';
 import 'package:test/test.dart';
 
 // Export fittizio nello stesso formato di Sossoldi (nessun dato reale).

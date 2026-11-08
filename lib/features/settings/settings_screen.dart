@@ -6,6 +6,7 @@ import '../../core/utils/formatters.dart';
 import '../../data/sample_data.dart';
 import '../../providers.dart';
 import '../../widgets/common.dart';
+import '../../widgets/app_logo.dart';
 import '../backup/backup_widgets.dart';
 import '../meal_vouchers/meal_voucher_widgets.dart';
 import 'import_sossoldi_screen.dart';
@@ -206,7 +207,11 @@ class SettingsScreen extends ConsumerWidget {
                   child: TextButton(
                     onPressed: () => showLicensePage(
                       context: context,
-                      applicationName: 'Financiee',
+                      applicationName: 'Financee',
+                      applicationIcon: const Padding(
+                        padding: EdgeInsets.all(8),
+                        child: AppLogo(size: 56),
+                      ),
                       applicationVersion: '1.0.0',
                     ),
                     child: const Text('Licenze open source'),
@@ -214,7 +219,7 @@ class SettingsScreen extends ConsumerWidget {
                 ),
                 Center(
                   child: Text(
-                    'Financiee · versione 1.0.0',
+                    'Financee · versione 1.0.0',
                     style: theme.textTheme.labelMedium
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                   ),

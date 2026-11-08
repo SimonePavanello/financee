@@ -1,5 +1,5 @@
-name: financiee
-description: "Financiee: gestione delle finanze personali (entrate, spese, categorie, report)."
+name: financee
+description: "Financee: gestione delle finanze personali (entrate, spese, categorie, report)."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -42,6 +42,24 @@ dev_dependencies:
   # Usato nei test di migrazione. Versione fissata: deve coincidere con
   # web/sqlite3.wasm (stessa release di sqlite3.dart).
   sqlite3: 3.5.2
+  # Icone dell'app: le immagini si generano con
+  # `dart run tool/generate_app_icon.dart`, poi `dart run flutter_launcher_icons`.
+  flutter_launcher_icons: ^0.14.4
+  image: ^4.2.0
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  image_path_android: "assets/branding/app_icon.png"
+  adaptive_icon_background: "assets/branding/app_icon_background.png"
+  adaptive_icon_foreground: "assets/branding/app_icon_foreground.png"
+  adaptive_icon_monochrome: "assets/branding/app_icon_monochrome.png"
+  # Il primo piano è già disegnato dentro l'area sicura: nessun margine in più.
+  adaptive_icon_foreground_inset: 0
+  min_sdk_android: 24
+  # Da attivare sul Mac, dopo aver creato la cartella ios/.
+  ios: false
+  image_path_ios: "assets/branding/app_icon_ios.png"
+  remove_alpha_ios: true
 
 flutter:
   uses-material-design: true

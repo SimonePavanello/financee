@@ -1,5 +1,5 @@
 @echo off
-rem Avvia Financiee nel browser (versione web compilata).
+rem Avvia Financee nel browser (versione web compilata).
 rem   avvia.bat          usa la build esistente (la crea se manca)
 rem   avvia.bat build    ricompila prima di avviare (dopo modifiche al codice)
 rem I dati restano salvati nel browser per l'indirizzo http://localhost:PORT
@@ -24,7 +24,7 @@ if errorlevel 1 (
 
 :serve
 echo.
-echo Financiee e' disponibile su http://localhost:%PORT%
+echo Financee e' disponibile su http://localhost:%PORT%
 echo Chiudi questa finestra (o premi Ctrl+C) per fermarla.
 echo.
 if not defined NO_BROWSER start "" "http://localhost:%PORT%"
